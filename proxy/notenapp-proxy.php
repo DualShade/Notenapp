@@ -1,6 +1,6 @@
 <?php
-// Notenapp-Proxy für normalen PHP-Webspace (z. B. IONOS). Einfach hochladen,
-// z. B. nach https://deine-domain.de/notenapp-proxy.php – fertig.
+// Notenapp-Proxy für normalen PHP-Webspace (z. B. IONOS, PHP ≥ 7.1 mit curl).
+// Einfach hochladen, z. B. nach https://deine-domain.de/notenapp-proxy.php – fertig.
 // Gleiches Protokoll wie proxy/worker.js:
 //
 //   POST ?route=rpc    {url, cookie, body}  → leitet JSON-RPC an *.webuntis.com weiter
@@ -40,7 +40,8 @@ function respond_json($data, $status = 200) {
 
 function host_allowed($list, $host) {
     foreach (array_filter(array_map('trim', explode(',', strtolower($list)))) as $h) {
-        if ($host === $h || str_ends_with($host, '.' . $h)) return true;
+        $suffix = '.' . $h;
+        if ($host === $h || substr($host, -strlen($suffix)) === $suffix) return true;
     }
     return false;
 }
@@ -85,7 +86,7 @@ if ($route === 'rpc' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($payload['cookie'])) {
         $headers[] = 'Cookie: ' . preg_replace('/[\r\n]/', '', substr((string) $payload['cookie'], 0, 2000));
     }
-    [$status, , $body] = forward($payload['url'], 'POST', $headers, (string) ($payload['body'] ?? ''));
+    list($status, , $body) = forward($payload['url'], 'POST', $headers, (string) ($payload['body'] ?? ''));
     http_response_code($status);
     header('Content-Type: application/json');
     echo $body;
@@ -99,7 +100,7 @@ if ($route === 'fetch' && $_SERVER['REQUEST_METHOD'] === 'GET') {
     if (!in_array($parts['scheme'] ?? '', ['http', 'https'], true) || !host_allowed($ALLOWED_HOSTS, $host)) {
         respond_json(['error' => "Host $host ist nicht freigegeben (ALLOWED_HOSTS)."], 403);
     }
-    [$status, $type, $body] = forward($url, 'GET', ['User-Agent: Mozilla/5.0 (Notenapp-Proxy)']);
+    list($status, $type, $body) = forward($url, 'GET', ['User-Agent: Mozilla/5.0 (Notenapp-Proxy)']);
     http_response_code($status);
     header('Content-Type: ' . $type);
     echo $body;

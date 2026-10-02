@@ -34,7 +34,7 @@ cd proxy
 npx wrangler deploy   # vorher ALLOWED_ORIGIN / ALLOWED_HOSTS in wrangler.toml setzen
 ```
 
-Zum Schluss legst du unter **Settings → Secrets and variables → Actions → Variables** die Variable **`PROXY_URL`** mit der Proxy-Adresse an und startest den Workflow neu. In der App erscheint dann **„Mit Untis verbinden“**:
+Die Proxy-Adresse steht in `site/js/config.js` (Standard: `https://dualshade.xyz/notenapp-proxy.php`). Alternativ legst du unter **Settings → Secrets and variables → Actions → Variables** die Variable **`PROXY_URL`** an, die beim Build Vorrang hat. In der App erscheint dann **„Mit Untis verbinden“**:
 
 1. Schule suchen
 2. Benutzername + Passwort eingeben

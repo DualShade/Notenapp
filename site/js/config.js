@@ -1,4 +1,5 @@
-// Wird beim Build aus der GitHub-Variable PROXY_URL befüllt (scripts/build.mjs).
+// Standard-Proxy für den Untis-Login (liegt auf dem IONOS-Webspace von dualshade.xyz).
+// Kann beim Build über die GitHub-Variable PROXY_URL überschrieben werden (scripts/build.mjs).
 export const APP_CONFIG = {
-  proxyUrl: '',
+  proxyUrl: 'https://dualshade.xyz/notenapp-proxy.php',
 };

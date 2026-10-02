@@ -1,0 +1,67 @@
+name: Notenapp bauen & veröffentlichen
+
+on:
+  push:
+  schedule:
+    # Stundenplan & Klausurplan regelmäßig aktualisieren (UTC):
+    # Schultage ca. 6–20 Uhr deutscher Zeit stündlich, Wochenende alle 6 Stunden
+    - cron: '17 4-18 * * 1-5'
+    - cron: '17 */6 * * 0,6'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Nur der Standard-Branch wird veröffentlicht (Push, Zeitplan oder manuell)
+    if: github.ref_name == github.event.repository.default_branch || github.event_name != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+      - id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Stundenplan (WebUntis) & Klausurplan (PDF) abrufen
+        run: npm run sync
+        env:
+          UNTIS_SERVER: ${{ vars.UNTIS_SERVER }}
+          UNTIS_SCHOOL: ${{ vars.UNTIS_SCHOOL }}
+          UNTIS_USER: ${{ secrets.UNTIS_USER }}
+          UNTIS_PASSWORD: ${{ secrets.UNTIS_PASSWORD }}
+          KLAUSUR_PAGE_URL: ${{ vars.KLAUSUR_PAGE_URL }}
+          KLAUSUR_PDF_URL: ${{ vars.KLAUSUR_PDF_URL }}
+          KLAUSUR_LINK_PATTERN: ${{ vars.KLAUSUR_LINK_PATTERN }}
+          KLAUSUR_STUFE: ${{ vars.KLAUSUR_STUFE }}
+          LK_THRESHOLD: ${{ vars.LK_THRESHOLD }}
+          PAGES_URL: ${{ steps.pages.outputs.base_url }}
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

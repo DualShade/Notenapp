@@ -1,0 +1,19 @@
+{
+  "name": "notenapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Notenapp mit automatischem Untis-Stundenplan, LK/GK-Erkennung, Klausurplan-Import und Notenschlüssel (0–15 Punkte).",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "sync": "node scripts/sync.mjs",
+    "dev": "node scripts/build.mjs && node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pdfjs-dist": "4.10.38"
+  }
+}

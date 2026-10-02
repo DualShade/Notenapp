@@ -1,0 +1,15 @@
+{
+  "untis": {
+    "server": "",
+    "school": "",
+    "weeksBack": 1,
+    "weeksAhead": 5
+  },
+  "klausuren": {
+    "pageUrl": "",
+    "pdfUrl": "",
+    "linkPattern": "klausur",
+    "stufe": ""
+  },
+  "lkThreshold": 4
+}

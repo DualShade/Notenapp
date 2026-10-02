@@ -204,3 +204,44 @@ export async function fetchUntisTimetable({
     await client.logout();
   }
 }
+
+const SCHOOL_SEARCH_URLS = [
+  'https://mobile.webuntis.com/ms/schoolquery2',
+  'https://schoolsearch.webuntis.com/schoolquery2',
+];
+
+/**
+ * Schulsuche wie in der Untis-App. Liefert [{name, address, server, loginName}].
+ * Bei zu vielen Treffern wirft Untis einen Fehler – dann genauer suchen.
+ */
+export async function searchSchools(query, { fetchImpl = globalThis.fetch } = {}) {
+  const search = String(query ?? '').trim();
+  if (search.length < 3) return [];
+  let lastError;
+  for (const url of SCHOOL_SEARCH_URLS) {
+    try {
+      const res = await fetchImpl(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ id: String(Date.now()), method: 'searchSchool', params: [{ search }], jsonrpc: '2.0' }),
+      });
+      if (!res.ok) throw new UntisError(`Schulsuche: HTTP ${res.status}`, res.status);
+      const data = await res.json();
+      if (data.error) {
+        if (data.error.code === -6003) throw new UntisError('Zu viele Treffer – bitte genauer suchen (z. B. mit Ort).', -6003);
+        throw new UntisError(`Schulsuche: ${data.error.message}`, data.error.code);
+      }
+      return (data.result?.schools ?? []).map((s) => ({
+        name: s.displayName,
+        address: s.address ?? '',
+        server: normalizeServer(s.server || s.serverUrl || ''),
+        loginName: s.loginName,
+        id: s.schoolId,
+      }));
+    } catch (err) {
+      if (err instanceof UntisError && err.code === -6003) throw err;
+      lastError = err;
+    }
+  }
+  throw lastError ?? new UntisError('Schulsuche nicht erreichbar.');
+}

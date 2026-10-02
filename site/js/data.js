@@ -1,11 +1,13 @@
-// Datenquellen: von der GitHub Action erzeugte JSON-Dateien, optionaler
-// CORS-Proxy für Live-Abrufe und PDF-Verarbeitung im Browser.
+// Datenquellen: Untis-Login in der App (über den Proxy), von der GitHub Action
+// erzeugte JSON-Dateien und PDF-Verarbeitung im Browser.
 
 import { getState, update, uid, kindOf, nextColor } from './store.js';
 import { normalizeTimetable, detectCourses, todayIso } from './timetable.js';
 import { extractPdfRows } from './pdf-text.js';
 import { extractCandidates, matchCandidates, klausurKey } from './klausur-parser.js';
 import { findPdfLink } from './link-finder.js';
+import { fetchUntisTimetable, searchSchools, UntisError } from './untis-client.js';
+import { APP_CONFIG } from './config.js';
 
 export const server = {
   timetable: null,
@@ -83,15 +85,112 @@ export function subjectForLesson(lesson) {
   return getState().subjects.find((s) => s.untisKey && s.untisKey === lesson.courseKey) ?? null;
 }
 
-// ---------- Proxy (optional, für Live-Abrufe direkt aus der App) ----------
+// ---------- Untis-Login direkt in der App (über den Notenapp-Proxy) ----------
+// Browser dürfen WebUntis nicht direkt ansprechen (CORS, Session-Cookie). Der
+// Proxy reicht die JSON-RPC-Aufrufe nur durch; die Logik läuft hier in der App.
 
 function proxyBase() {
-  const url = getState().settings.proxyUrl?.trim();
-  return url ? url.replace(/\/$/, '') : null;
+  const url = getState().settings.proxyUrl?.trim() || APP_CONFIG.proxyUrl?.trim();
+  return url || null;
 }
 
 export function hasProxy() {
   return !!proxyBase();
+}
+
+function proxyUrl(params) {
+  const u = new URL(proxyBase(), location.href);
+  for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+  return u.href;
+}
+
+/** fetch-Ersatz, der Anfragen an *.webuntis.com durch den Proxy tunnelt. */
+function tunnelFetch(url, init = {}) {
+  return fetch(proxyUrl({ route: 'rpc' }), {
+    method: 'POST',
+    // text/plain = "einfache" Anfrage ohne CORS-Preflight
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ url, cookie: init.headers?.Cookie ?? null, body: init.body ?? '' }),
+  });
+}
+
+const NO_PROXY = 'Für den Untis-Login wird der Notenapp-Proxy benötigt. Er ist für diese Seite noch nicht eingerichtet (siehe README → „Untis-Login in der App“).';
+
+/** Schulsuche: erst direkt versuchen, sonst über den Proxy. */
+export async function findSchools(query) {
+  try {
+    return await searchSchools(query);
+  } catch (err) {
+    if (err instanceof UntisError) throw err; // echte Antwort von Untis (z. B. zu viele Treffer)
+    if (!hasProxy()) throw new Error(NO_PROXY);
+    return searchSchools(query, { fetchImpl: tunnelFetch });
+  }
+}
+
+export function untisAccount() {
+  const u = getState().settings.untis;
+  return u?.server && u?.school && u?.username ? u : null;
+}
+
+async function loadUntis(account) {
+  if (!hasProxy()) throw new Error(NO_PROXY);
+  const raw = await fetchUntisTimetable({
+    server: account.server,
+    school: account.school,
+    username: account.username,
+    password: account.password,
+    weeksBack: 1,
+    weeksAhead: 5,
+    fetchImpl: tunnelFetch,
+  });
+  return normalizeTimetable(raw);
+}
+
+function friendlyUntisError(err) {
+  if (err instanceof UntisError && err.code === -8504) return new Error('Benutzername oder Passwort ist falsch.');
+  if (err instanceof UntisError && err.code === -8500) return new Error('Schule nicht gefunden – bitte neu suchen.');
+  if (err instanceof TypeError) return new Error('Proxy nicht erreichbar. Bitte später erneut versuchen.');
+  return err;
+}
+
+/** Zugangsdaten prüfen, Stundenplan laden und Konto speichern. */
+export async function connectUntis(account) {
+  let timetable;
+  try {
+    timetable = await loadUntis(account);
+  } catch (err) {
+    throw friendlyUntisError(err);
+  }
+  update((s) => {
+    s.settings.untis = { ...account };
+    s.localTimetable = timetable;
+  }, { silent: true });
+  const created = syncSubjectsWithTimetable();
+  update(() => {});
+  return { timetable, created };
+}
+
+/** Stundenplan mit gespeichertem Konto neu laden. */
+export async function refreshUntis({ silent = false } = {}) {
+  const account = untisAccount();
+  if (!account) throw new Error('Kein Untis-Konto verbunden.');
+  let timetable;
+  try {
+    timetable = await loadUntis(account);
+  } catch (err) {
+    throw friendlyUntisError(err);
+  }
+  update((s) => { s.localTimetable = timetable; }, { silent: true });
+  const created = syncSubjectsWithTimetable();
+  if (!silent) update(() => {});
+  return { timetable, created };
+}
+
+export function disconnectUntis() {
+  update((s) => {
+    s.settings.untis = { server: '', school: '', schoolName: '', username: '', password: '' };
+    s.localTimetable = null;
+  });
 }
 
 /** Holt eine fremde URL – erst direkt, dann über den Proxy (CORS). */
@@ -102,32 +201,12 @@ export async function fetchExternal(url, as = 'text') {
   };
   try {
     return await tryRead(await fetch(url));
-  } catch (direct) {
-    const base = proxyBase();
-    if (!base) {
-      throw new Error('Die Seite erlaubt keinen direkten Abruf aus dem Browser (CORS). Trage in den Einstellungen einen Proxy ein oder nutze die GitHub Action.');
+  } catch {
+    if (!hasProxy()) {
+      throw new Error('Die Seite erlaubt keinen direkten Abruf aus dem Browser (CORS). Nutze die GitHub Action oder richte den Proxy ein.');
     }
-    return tryRead(await fetch(`${base}/fetch?url=${encodeURIComponent(url)}`));
+    return tryRead(await fetch(proxyUrl({ route: 'fetch', url })));
   }
-}
-
-/** Live-Abruf des Stundenplans über den Proxy (Zugangsdaten bleiben im Browser). */
-export async function liveUntisImport() {
-  const base = proxyBase();
-  if (!base) throw new Error('Kein Proxy konfiguriert.');
-  const { untis } = getState().settings;
-  const res = await fetch(`${base}/untis`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...untis, weeksBack: 1, weeksAhead: 5 }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? `Proxy antwortet mit HTTP ${res.status}`);
-  const timetable = normalizeTimetable(data);
-  update((s) => { s.localTimetable = timetable; }, { silent: true });
-  const created = syncSubjectsWithTimetable();
-  update(() => {});
-  return { timetable, created };
 }
 
 // ---------- Klausurplan-PDF ----------

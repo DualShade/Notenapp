@@ -4,10 +4,10 @@
 const CACHE = 'notenapp-__BUILD__';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest', 'icons/icon.svg',
-  'js/app.js', 'js/ui.js', 'js/store.js', 'js/data.js', 'js/demo.js', 'js/grades.js', 'js/timetable.js',
+  'js/app.js', 'js/config.js', 'js/ui.js', 'js/store.js', 'js/data.js', 'js/demo.js', 'js/grades.js', 'js/timetable.js',
   'js/klausur-parser.js', 'js/pdf-text.js', 'js/link-finder.js', 'js/untis-client.js',
   'js/views/common.js', 'js/views/overview.js', 'js/views/subjects.js', 'js/views/timetable-view.js',
-  'js/views/klausuren.js', 'js/views/schluessel.js', 'js/views/settings.js',
+  'js/views/klausuren.js', 'js/views/schluessel.js', 'js/views/settings.js', 'js/views/untis-connect.js',
 ];
 
 self.addEventListener('install', (event) => {

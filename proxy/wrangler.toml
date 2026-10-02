@@ -3,7 +3,7 @@ main = "worker.js"
 compatibility_date = "2026-09-01"
 
 [vars]
-# Deine GitHub-Pages-Adresse, z. B. "https://dualshade.github.io"
-ALLOWED_ORIGIN = "*"
+# Deine GitHub-Pages-Adresse
+ALLOWED_ORIGIN = "https://dualshade.github.io"
 # Host(s) deiner Schul-Homepage, kommagetrennt, z. B. "www.meine-schule.de"
 ALLOWED_HOSTS = ""

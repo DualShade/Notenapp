@@ -34,6 +34,8 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+        env:
+          PROXY_URL: ${{ vars.PROXY_URL }}
 
       - id: pages
         uses: actions/configure-pages@v5

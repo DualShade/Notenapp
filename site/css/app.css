@@ -379,3 +379,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible
 .status-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 .status-list li { overflow-wrap: anywhere; }
 .status-list a { word-break: break-all; }
+
+.small-spinner { width: 14px; height: 14px; border-width: 2px; display: inline-block; vertical-align: -2px; }
+.school-results { max-height: 50vh; overflow-y: auto; }
+.school-results .list-item > .icon:first-child { color: var(--accent); }

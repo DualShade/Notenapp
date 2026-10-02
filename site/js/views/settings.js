@@ -1,6 +1,7 @@
 import { h, icon, field, toast, confirmDialog, formatDateTime } from '../ui.js';
 import { getState, update, replaceState, resetState } from '../store.js';
-import { server, hasProxy, liveUntisImport, syncSubjectsWithTimetable } from '../data.js';
+import { server, hasProxy, syncSubjectsWithTimetable, untisAccount, refreshUntis, disconnectUntis, currentTimetable } from '../data.js';
+import { openUntisConnect } from './untis-connect.js';
 import { openKlausurImport } from './klausuren.js';
 import { loadDemo } from '../demo.js';
 
@@ -56,11 +57,57 @@ async function importData(file) {
   }
 }
 
+function untisCard() {
+  const account = untisAccount();
+  const timetable = currentTimetable();
+  if (!account) {
+    return h('section', { class: 'card' },
+      h('h3', { class: 'card-title' }, 'Untis-Konto'),
+      h('p', { class: 'muted small' }, 'Verbinde dein WebUntis-Konto: Schule suchen, Benutzername und Passwort eingeben – der Stundenplan wird dann bei jedem Öffnen automatisch aktualisiert.'),
+      h('button', { class: 'btn primary', onclick: openUntisConnect }, icon('link', 18), 'Mit Untis verbinden'),
+      proxySettings());
+  }
+  return h('section', { class: 'card' },
+    h('h3', { class: 'card-title' }, 'Untis-Konto'),
+    h('div', { class: 'choice' },
+      icon('home', 22),
+      h('div', { class: 'grow' },
+        h('strong', {}, account.schoolName || account.school),
+        h('div', { class: 'sub' }, `${account.username} · Stand ${timetable?.origin === 'live' ? formatDateTime(timetable.fetchedAt) : '–'}`))),
+    h('div', { class: 'row gap wrap' },
+      h('button', { class: 'btn', onclick: async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try {
+          const { timetable: tt, created } = await refreshUntis();
+          toast(`${tt.lessons.length} Stunden geladen${created ? `, ${created} Fächer angelegt` : ''}.`, 'success');
+        } catch (err) {
+          toast(err.message, 'error');
+        } finally { btn.disabled = false; }
+      } }, icon('refresh', 18), 'Jetzt aktualisieren'),
+      h('button', { class: 'btn ghost', onclick: openUntisConnect }, 'Konto ändern'),
+      h('button', { class: 'btn danger ghost', onclick: async () => {
+        if (await confirmDialog('Untis-Konto von diesem Gerät entfernen? Deine Noten bleiben erhalten.', { ok: 'Abmelden' })) disconnectUntis();
+      } }, 'Abmelden')),
+    proxySettings());
+}
+
+function proxySettings() {
+  return h('details', { class: 'more' },
+    h('summary', { class: 'small' }, 'Erweitert: Proxy'),
+    h('p', { class: 'muted small' }, hasProxy()
+      ? 'Untis wird über den eingerichteten Notenapp-Proxy abgefragt. Hier kannst du einen anderen eintragen.'
+      : 'Für den Untis-Login braucht die App einen kleinen Proxy (siehe README). Ist er beim Build hinterlegt, musst du hier nichts eintragen.'),
+    text(['proxyUrl'], 'Eigene Proxy-URL (optional)', { placeholder: 'https://example.com/notenapp-proxy.php', type: 'url', rerender: true }));
+}
+
 export function settingsView() {
   const { settings } = getState();
   const status = server.status;
 
   return h('div', { class: 'view' },
+    untisCard(),
+
     h('section', { class: 'card' },
       h('h3', { class: 'card-title' }, 'Halbjahr & Bewertung'),
       h('div', { class: 'grid-2' },
@@ -84,35 +131,15 @@ export function settingsView() {
       toggle('lkDouble', 'LKs im Gesamtschnitt doppelt gewichten', 'Wie bei der Abiturberechnung.')),
 
     h('section', { class: 'card' },
-      h('h3', { class: 'card-title' }, 'Stundenplan aus WebUntis'),
-      h('ul', { class: 'status-list small' },
-        statusLine(status?.untis, 'Automatische Synchronisation'),
-        server.timetable ? h('li', {}, `Letzter Stand: ${formatDateTime(server.timetable.fetchedAt)} · ${server.timetable.school ?? ''}`) : null),
+      h('h3', { class: 'card-title' }, 'LK/GK-Erkennung'),
       field('LK ab … Wochenstunden', h('input', {
         type: 'number', min: '1', max: '10', step: '0.5', value: settings.lkThreshold,
         onchange: (e) => { update((s) => { s.settings.lkThreshold = Number(e.target.value) || 4; }, { silent: true }); syncSubjectsWithTimetable(); update(() => {}); },
       }), 'LKs haben 5, GKs 3 Wochenstunden. Standard: ab 4 Stunden = LK.'),
       toggle('autoSubjects', 'Fächer automatisch aus Untis anlegen'),
-      h('details', { class: 'more' },
-        h('summary', {}, 'Live-Import direkt in der App (optional, mit Proxy)'),
-        h('p', { class: 'muted small' }, 'Normalerweise lädt die GitHub Action den Stundenplan mehrmals täglich. Für einen sofortigen Abruf aus dem Browser wird wegen CORS ein kleiner Proxy benötigt (siehe proxy/worker.js). Die Zugangsdaten werden nur lokal auf diesem Gerät gespeichert.'),
-        text(['proxyUrl'], 'Proxy-URL', { placeholder: 'https://notenapp-proxy.<name>.workers.dev', type: 'url', rerender: true }),
-        h('div', { class: 'grid-2' },
-          text(['untis', 'server'], 'Untis-Server', { placeholder: 'xyz.webuntis.com' }),
-          text(['untis', 'school'], 'Schulname (Untis)', { placeholder: 'gym-musterstadt' })),
-        h('div', { class: 'grid-2' },
-          text(['untis', 'username'], 'Benutzername', { autocomplete: 'username' }),
-          text(['untis', 'password'], 'Passwort', { type: 'password', autocomplete: 'current-password' })),
-        h('button', { class: 'btn primary', disabled: !hasProxy(), onclick: async (e) => {
-          const btn = e.currentTarget;
-          btn.disabled = true;
-          try {
-            const { timetable, created } = await liveUntisImport();
-            toast(`${timetable.lessons.length} Stunden geladen${created ? `, ${created} Fächer angelegt` : ''}.`, 'success');
-          } catch (err) {
-            toast(err.message, 'error');
-          } finally { btn.disabled = false; }
-        } }, icon('refresh', 18), 'Jetzt live laden'))),
+      status?.untis && !status.untis.skipped ? h('ul', { class: 'status-list small' },
+        statusLine(status.untis, 'GitHub-Action-Synchronisation'),
+        server.timetable ? h('li', {}, `Stand: ${formatDateTime(server.timetable.fetchedAt)}`) : null) : null),
 
     h('section', { class: 'card' },
       h('h3', { class: 'card-title' }, 'Klausurplan (PDF)'),

@@ -1,6 +1,6 @@
 import { h, icon, toast } from './ui.js';
 import { getState, subscribe, update } from './store.js';
-import { loadServerData, syncSubjectsWithTimetable, autoImportFromServer } from './data.js';
+import { loadServerData, syncSubjectsWithTimetable, autoImportFromServer, untisAccount, hasProxy, refreshUntis } from './data.js';
 import { overviewView } from './views/overview.js';
 import { subjectsView, subjectDetailView } from './views/subjects.js';
 import { timetableView } from './views/timetable-view.js';
@@ -70,11 +70,27 @@ function render() {
   lastPath = location.hash;
 }
 
+const UNTIS_MAX_AGE = 15 * 60 * 1000;
+
+/** Verbundenes Untis-Konto: Stundenplan beim Öffnen frisch laden. */
+async function refreshUntisIfStale() {
+  const local = getState().localTimetable;
+  if (!untisAccount() || !hasProxy()) return 0;
+  if (local && Date.now() - new Date(local.fetchedAt).getTime() < UNTIS_MAX_AGE) return 0;
+  try {
+    const { created } = await refreshUntis({ silent: true });
+    return created;
+  } catch (err) {
+    toast(`Untis: ${err.message}`, 'error');
+    return 0;
+  }
+}
+
 let lastLoad = 0;
 async function refresh({ quiet = true } = {}) {
   lastLoad = Date.now();
-  await loadServerData();
-  const created = syncSubjectsWithTimetable();
+  const [, untisCreated] = await Promise.all([loadServerData(), refreshUntisIfStale()]);
+  const created = syncSubjectsWithTimetable() + untisCreated;
   const imported = autoImportFromServer();
   render();
   if (created) toast(`${created} Fächer aus Untis übernommen.`, 'success');

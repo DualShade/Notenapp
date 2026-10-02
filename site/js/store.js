@@ -30,7 +30,7 @@ export function defaultState() {
       customScale: null,
       theme: 'auto',
       proxyUrl: '',
-      untis: { server: '', school: '', username: '', password: '' },
+      untis: { server: '', school: '', schoolName: '', username: '', password: '' },
       klausurSource: { pageUrl: '', pdfUrl: '', linkPattern: 'klausur', stufe: '' },
       autoImportKlausuren: false,
       autoSubjects: true,

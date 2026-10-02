@@ -1,7 +1,8 @@
 import { h, icon, empty, openModal, formatDate, formatDateTime, toast } from '../ui.js';
 import { getState, update } from '../store.js';
 import { mondayKey, addDaysIso, todayIso, weekMatrix, slotSpan } from '../timetable.js';
-import { currentTimetable, currentCourses, subjectForLesson, hasProxy, liveUntisImport, server } from '../data.js';
+import { currentTimetable, currentCourses, subjectForLesson, untisAccount, refreshUntis, server } from '../data.js';
+import { openUntisConnect } from './untis-connect.js';
 import { kindBadge, colorDot } from './common.js';
 import { loadDemo } from '../demo.js';
 
@@ -70,7 +71,7 @@ function weekGrid(timetable, monday) {
 async function runLiveImport(button) {
   button.disabled = true;
   try {
-    const { timetable, created } = await liveUntisImport();
+    const { timetable, created } = await refreshUntis();
     toast(`Stundenplan geladen: ${timetable.lessons.length} Stunden${created ? `, ${created} Fächer angelegt` : ''}.`, 'success');
   } catch (err) {
     toast(err.message, 'error');
@@ -83,10 +84,9 @@ export function timetableView() {
   const timetable = currentTimetable();
   if (!timetable) {
     return h('div', { class: 'view' }, empty('Noch kein Stundenplan',
-      server.status?.untis?.message ?? 'Der Stundenplan wird automatisch von der GitHub Action aus WebUntis geladen. Alternativ kannst du ihn über einen Proxy live importieren.',
+      'Verbinde dein WebUntis-Konto: Schule suchen, Benutzername und Passwort eingeben – fertig.',
       h('div', { class: 'row gap wrap center-x' },
-        hasProxy() ? h('button', { class: 'btn primary', onclick: (e) => runLiveImport(e.currentTarget) }, icon('refresh', 18), 'Live aus Untis laden') : null,
-        h('a', { class: 'btn ghost', href: '#/einstellungen' }, 'Einstellungen'),
+        h('button', { class: 'btn primary', onclick: openUntisConnect }, icon('link', 18), 'Mit Untis verbinden'),
         h('button', { class: 'btn ghost', onclick: loadDemo }, 'Demo ansehen'))));
   }
 
@@ -120,7 +120,7 @@ export function timetableView() {
     h('section', { class: 'card' },
       h('div', { class: 'card-head' },
         h('h3', { class: 'card-title' }, 'Kurse aus Untis'),
-        hasProxy() ? h('button', { class: 'btn ghost small', onclick: (e) => runLiveImport(e.currentTarget) }, icon('refresh', 16), 'Live laden') : null),
+        untisAccount() ? h('button', { class: 'btn ghost small', onclick: (e) => runLiveImport(e.currentTarget) }, icon('refresh', 16), 'Aktualisieren') : null),
       h('p', { class: 'muted small' }, `Kurse mit mindestens ${String(threshold).replace('.', ',')} Wochenstunden werden als Leistungskurs (LK) erkannt, alle anderen als Grundkurs (GK). Ferien- und Feiertagswochen werden ignoriert. Im Fach kannst du die Einstufung manuell ändern.`),
       h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
         h('thead', {}, h('tr', {}, h('th', {}, 'Kurs'), h('th', {}, 'Std.'), h('th', {}, 'Art'), h('th', {}, 'Lehrkraft'))),

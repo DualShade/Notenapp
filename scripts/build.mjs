@@ -23,6 +23,12 @@ const sw = await readFile(swPath, 'utf8');
 const version = process.env.GITHUB_SHA?.slice(0, 8) ?? Date.now().toString(36);
 await writeFile(swPath, sw.replace('__BUILD__', version));
 
+// Proxy-Adresse für den Untis-Login in der App (GitHub-Variable PROXY_URL).
+if (process.env.PROXY_URL) {
+  await writeFile(path.join(dist, 'js', 'config.js'),
+    `// Automatisch beim Build erzeugt.\nexport const APP_CONFIG = {\n  proxyUrl: ${JSON.stringify(process.env.PROXY_URL.trim())},\n};\n`);
+}
+
 // GitHub Pages soll keine Jekyll-Verarbeitung machen.
 await writeFile(path.join(dist, '.nojekyll'), '');
 console.log(`Build fertig: dist/ (Version ${version})`);

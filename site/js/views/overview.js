@@ -6,6 +6,7 @@ import { currentTimetable, pendingServerProposals, server, subjectForLesson } fr
 import { activeSubjects, averageFor, averageBlock, colorDot, pointsPill, kindBadge, klausurRow, openGradeEditor, openSubjectEditor } from './common.js';
 import { openKlausurImport } from './klausuren.js';
 import { loadDemo } from '../demo.js';
+import { openUntisConnect } from './untis-connect.js';
 
 function nextSchoolDay(timetable, today) {
   if (!timetable) return null;
@@ -52,11 +53,9 @@ export function overviewView() {
       h('section', { class: 'card hero welcome' },
         h('h2', {}, 'Willkommen in deiner Notenapp 👋'),
         h('p', {}, 'Dein Stundenplan kommt automatisch aus WebUntis: Kurse mit 5 Wochenstunden werden als LK erkannt, alle anderen als GK. Klausurtermine kannst du aus dem PDF-Klausurplan deiner Schul-Homepage übernehmen.'),
-        h('p', { class: 'muted small' }, server.status?.untis?.message
-          ? `Status der automatischen Synchronisation: ${server.status.untis.message}`
-          : 'Noch keine Untis-Daten. Richte die GitHub Action ein (siehe README) oder nutze in den Einstellungen den Live-Import.'),
+        h('p', { class: 'muted small' }, 'Such einfach deine Schule und melde dich mit deinem Untis-Benutzernamen und Passwort an.'),
         h('div', { class: 'row gap wrap' },
-          h('a', { class: 'btn primary', href: '#/einstellungen' }, icon('settings', 18), 'Einrichten'),
+          h('button', { class: 'btn primary', onclick: openUntisConnect }, icon('link', 18), 'Mit Untis verbinden'),
           h('button', { class: 'btn ghost', onclick: () => openSubjectEditor() }, icon('plus', 18), 'Fach manuell anlegen'),
           h('button', { class: 'btn ghost', onclick: loadDemo }, 'Demo ansehen'))));
   }

@@ -2,6 +2,7 @@ import { h, icon, field, toast, confirmDialog, formatDateTime } from '../ui.js';
 import { getState, update, replaceState, resetState } from '../store.js';
 import { server, hasProxy, syncSubjectsWithTimetable, untisAccount, refreshUntis, disconnectUntis, currentTimetable } from '../data.js';
 import { openUntisConnect } from './untis-connect.js';
+import { APP_CONFIG } from '../config.js';
 import { openKlausurImport } from './klausuren.js';
 import { loadDemo } from '../demo.js';
 
@@ -93,12 +94,14 @@ function untisCard() {
 }
 
 function proxySettings() {
+  const custom = getState().settings.proxyUrl?.trim();
   return h('details', { class: 'more' },
     h('summary', { class: 'small' }, 'Erweitert: Proxy'),
-    h('p', { class: 'muted small' }, hasProxy()
-      ? 'Untis wird über den eingerichteten Notenapp-Proxy abgefragt. Hier kannst du einen anderen eintragen.'
-      : 'Für den Untis-Login braucht die App einen kleinen Proxy (siehe README). Ist er beim Build hinterlegt, musst du hier nichts eintragen.'),
-    text(['proxyUrl'], 'Eigene Proxy-URL (optional)', { placeholder: 'https://example.com/notenapp-proxy.php', type: 'url', rerender: true }));
+    h('p', { class: 'muted small' }, APP_CONFIG.proxyUrl
+      ? `Standardmäßig wird ${APP_CONFIG.proxyUrl} benutzt – hier musst du nichts eintragen.`
+      : 'Für den Untis-Login braucht die App einen kleinen Proxy (siehe README).'),
+    text(['proxyUrl'], 'Anderen Proxy verwenden (optional)', { placeholder: APP_CONFIG.proxyUrl || 'https://example.com/notenapp-proxy.php', type: 'url', rerender: true }),
+    custom && APP_CONFIG.proxyUrl ? h('button', { class: 'btn ghost small', onclick: () => update((s) => { s.settings.proxyUrl = ''; }) }, 'Standard-Proxy verwenden') : null);
 }
 
 export function settingsView() {

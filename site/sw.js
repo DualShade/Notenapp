@@ -1,5 +1,5 @@
-// Service Worker: App-Dateien offline verfügbar machen.
-// Daten (data/*.json) immer zuerst frisch aus dem Netz, Cache nur als Fallback.
+// Service Worker: App offline verfügbar machen. Alles kommt zuerst frisch aus
+// dem Netz; der Cache springt nur ein, wenn keine Verbindung besteht.
 
 const CACHE = 'notenapp-__BUILD__';
 const SHELL = [
@@ -11,7 +11,10 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: 'reload' umgeht den HTTP-Cache, sonst landen evtl. alte Dateien im neuen Cache
+  event.waitUntil(caches.open(CACHE)
+    .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -20,29 +23,18 @@ self.addEventListener('activate', (event) => {
     .then(() => self.clients.claim()));
 });
 
+// Immer zuerst frisch aus dem Netz (Updates kommen sofort an), der Cache ist
+// nur der Offline-Fallback. 'no-cache' fragt beim Server nach, ob sich die
+// Datei geändert hat – unveränderte Dateien kosten kaum Datenvolumen.
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== location.origin) return;
-
-  if (url.pathname.includes('/data/')) {
-    // Network first: Stundenplan & Klausurplan sollen immer aktuell sein.
-    event.respondWith(fetch(event.request).then((res) => {
+  const key = url.pathname.includes('/data/') ? url.pathname : event.request;
+  event.respondWith(fetch(event.request, { cache: 'no-cache' }).then((res) => {
+    if (res.ok) {
       const copy = res.clone();
-      if (res.ok) caches.open(CACHE).then((c) => c.put(url.pathname, copy));
-      return res;
-    }).catch(() => caches.match(url.pathname)));
-    return;
-  }
-
-  // App-Dateien: Cache first, im Hintergrund aktualisieren.
-  event.respondWith(caches.match(event.request).then((cached) => {
-    const network = fetch(event.request).then((res) => {
-      if (res.ok) {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(event.request, copy));
-      }
-      return res;
-    }).catch(() => cached);
-    return cached ?? network;
-  }));
+      caches.open(CACHE).then((c) => c.put(key, copy));
+    }
+    return res;
+  }).catch(() => caches.match(key, { ignoreSearch: true })));
 });

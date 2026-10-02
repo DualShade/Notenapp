@@ -32,3 +32,28 @@ test('Migration: alte 50/50-Standards werden umgestellt, eigene Werte bleiben', 
   custom.settings.weights.LK = { schriftlich: 70, muendlich: 30 };
   assert.deepEqual(migrate(custom).settings.weights.LK, { schriftlich: 70, muendlich: 30 });
 });
+
+import { requiredPoints, effectivePoints } from '../site/js/grades.js';
+
+test('Wunschnote: benötigte Punkte in der nächsten Klausur/Mitarbeit', () => {
+  const w = { schriftlich: 2, muendlich: 1 };
+  const grades = [{ type: 'klausur', points: 9 }, { type: 'muendlich', points: 12 }];
+  // Schnitt jetzt: (2*9 + 12)/3 = 10. Ziel 11 → schriftlich muss 10,5 werden → nächste Klausur 12
+  const x = requiredPoints(grades, w, 11, 'schriftlich');
+  assert.equal(x, 12);
+  const check = subjectAverage([...grades, { type: 'klausur', points: x }], w).average;
+  assert.equal(check, 11);
+  // mündlich: Gruppe müsste 15 werden → nächste Mitarbeit 18 (nicht erreichbar)
+  assert.equal(requiredPoints(grades, w, 11, 'muendlich'), 18);
+  // ohne andere Gruppe zählt nur die eigene
+  assert.equal(requiredPoints([{ type: 'muendlich', points: 10 }], w, 12, 'muendlich'), 14);
+  // Ziel schon sicher
+  assert.ok(requiredPoints(grades, w, 5, 'schriftlich') < 0);
+});
+
+test('Zeugnisnote: manuell oder gerundeter Schnitt', () => {
+  assert.equal(effectivePoints(11.5, null), 12);
+  assert.equal(effectivePoints(11.4, null), 11);
+  assert.equal(effectivePoints(11.4, 13), 13);
+  assert.equal(effectivePoints(null, null), null);
+});

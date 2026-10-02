@@ -6,8 +6,16 @@ Notenapp für die Oberstufe im **Punktesystem (0–15)** als Web-App auf **GitHu
 - **LK/GK-Erkennung über die Wochenstunden**: Kurse mit 5 Wochenstunden werden zu Leistungskursen, Kurse mit 3 zu Grundkursen. Standardmäßig gilt alles ab 4 Stunden als LK, das kannst du ändern. Ferien- und Feiertagswochen werden nicht mitgezählt.
 - **Klausurplan-Import aus einer PDF (optional)**: Der aktuelle Klausurplan wird **immer neu von der Schul-Homepage geladen**. Die App erkennt darin deine Kurse (z. B. `M-L1`, `Deutsch GK 2`) und zeigt dir die Termine erst als Vorschau. Übernommen wird nur, was du bestätigst. Wenn du willst, passiert das auch automatisch.
 - **Notenschlüssel**: Tabelle 15 → 0 Punkte mit Prozentgrenzen und den nötigen Bewertungseinheiten (BE), dazu ein Klausur-Rechner, eine Umrechnung Punkte ↔ Note und ein eigener Schlüssel.
-- **Noten wie in einer Notenapp**: Fächer, Halbjahre (EF.1 … Q2.2), Klausuren und sonstige Mitarbeit mit eigener Gewichtung, dazu Fach- und Gesamtschnitt. LKs können auf Wunsch doppelt zählen.
-- **Läuft als installierbare PWA**, auch offline, mit hellem und dunklem Design. Die Noten bleiben **nur auf deinem Gerät**. Über eine Export/Import-Sicherung bringst du sie auf ein anderes Gerät.
+- **Noten wie in einer Notenapp**: Fächer, Halbjahre (EF.1 … Q2.2), schriftlich und sonstige Mitarbeit als Verhältnis gewichtet (Standard LK 2:1, GK 1:1, je Fach anpassbar), dazu Fach- und Gesamtschnitt sowie Zeugnisnoten pro Halbjahr.
+- **Konto & Cloud-Sync**: Registrierung mit E-Mail und Passwort. Alles wird automatisch gesichert und zwischen Geräten synchronisiert, auch offline. Änderungen werden pro Eintrag zusammengeführt, sodass nichts verloren geht. Es gibt einen Passwort-Reset per Mail, und du kannst dein Konto jederzeit löschen.
+- **Hausaufgaben**: Fällig standardmäßig zur nächsten Stunde des Fachs laut Untis. Überfällige werden markiert, erledigte abgehakt.
+- **Wunschnote**: „Für 13 Punkte brauchst du in der nächsten Klausur mindestens 15.“
+- **Abi-Rechner**: Block I mit automatischer Auswahl der besten Kurse (LK doppelt) und Block II. Fehlende Halbjahre und Prüfungen werden als Prognose geschätzt. Dazu Unterkurs-Warnungen und was du für deine Wunsch-Abinote brauchst.
+- **Statistik**: Gesamtschnitt pro Halbjahr, Notenverteilung, Verlauf pro Fach, Stärken und Schwächen.
+- **Fehlzeiten**: Entschuldigt und unentschuldigt, pro Fach oder ganzer Tag, direkt aus dem Stundenplan eintragbar.
+- **Kalender**: Klausuren und Hausaufgaben als Abo im Handy-Kalender mit Erinnerung am Vorabend, auch bei geschlossener App. Alternativ als .ics-Datei.
+- **Notenübersicht** zum Drucken bzw. als PDF.
+- **Läuft als installierbare PWA**, auch offline, mit hellem und dunklem Design.
 
 > Zum Ausprobieren ohne Einrichtung tippst du auf der Startseite auf **„Demo ansehen“**.
 
@@ -41,6 +49,14 @@ Die Proxy-Adresse steht in `site/js/config.js` (Standard: `https://dualshade.xyz
 3. Fertig
 
 Die Zugangsdaten bleiben nur auf dem jeweiligen Gerät. Jeder, der die Seite nutzt, meldet sich mit seinem eigenen Konto an. Schulen, die nur per Microsoft/IServ-Login (SSO) anmelden, unterstützen keinen Passwort-Login über die API.
+
+### Konto-Server (für Cloud-Sync und Kalender-Abo)
+`proxy/notenapp-api.php` kommt auf denselben PHP-Webspace wie der Proxy, z. B. `https://dualshade.xyz/notenapp-api.php`. Die Adresse steht in `site/js/config.js` (`apiUrl`) und lässt sich über die GitHub-Variable `API_URL` überschreiben.
+- Die Daten liegen in `notenapp-data/` neben der Datei. Jede Datei beginnt mit einer PHP-`exit`-Zeile, dadurch sind sie auch ohne `.htaccess` nicht abrufbar.
+- Passwörter werden mit `password_hash` gespeichert, Sitzungs- und Reset-Tokens nur als SHA-256.
+- Fehlversuche beim Login sind begrenzt.
+- Passwort-Reset-Mails gehen über PHP `mail()`.
+- Das Untis-Passwort wird nie hochgeladen.
 
 ### 3. Klausurplan-Quelle angeben (optional)
 **Settings → Secrets and variables → Actions → Variables**
@@ -80,7 +96,7 @@ Zeilen ohne Treffer kannst du in der Vorschau selbst einem Fach zuordnen.
 
 ```bash
 npm install
-npm test              # Tests (Parser, LK/GK, Noten, Untis-Client, Schulsuche, beide Proxys)
+npm test              # Tests (Parser, LK/GK, Noten, Untis, Proxys, Konto-API, Sync-Merge, Abi)
 npm run build         # baut dist/
 UNTIS_SERVER=… UNTIS_SCHOOL=… UNTIS_USER=… UNTIS_PASSWORD=… \
 KLAUSUR_PAGE_URL=… npm run sync   # Daten nach dist/data holen
@@ -99,6 +115,9 @@ site/                 statische App (Vanilla JS, ohne Build-Framework)
   js/grades.js        Schnitte, Notenschlüssel, Punkte ↔ Note
 scripts/sync.mjs      Abruf in der GitHub Action
 scripts/build.mjs     Build nach dist/ (inkl. pdf.js)
-proxy/notenapp-proxy.php  Proxy für PHP-Webspace (z. B. IONOS)
+proxy/notenapp-proxy.php  Untis-/Homepage-Proxy für PHP-Webspace (z. B. IONOS)
+proxy/notenapp-api.php    Konto-API: Login, Cloud-Sync, Passwort-Reset, Kalender-Abo
+site/js/sync-model.js Änderungsverfolgung + Zusammenführen (pro Eintrag)
+site/js/abi-calc.js   Abiturberechnung (KMK)
 proxy/worker.js       gleicher Proxy als Cloudflare Worker
 ```

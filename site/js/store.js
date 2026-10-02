@@ -2,6 +2,7 @@
 
 import { SCALE_PRESETS } from './grades.js';
 import { DEFAULT_LK_THRESHOLD } from './timetable.js';
+import { buildIndex, trackChanges, applyPayload } from './sync-model.js';
 
 const KEY = 'notenapp:v1';
 
@@ -39,6 +40,11 @@ export function defaultState() {
     subjects: [],
     grades: [],
     klausuren: [],
+    homework: [],
+    absences: [],
+    finals: [], // Zeugnisnoten: {id: "<fach>|<halbjahr>", subjectId, halbjahr, points}
+    deleted: {},
+    settingsUpdatedAt: 0,
     ignoredKlausurKeys: [],
     klausurSourceSeenAt: null,
     localTimetable: null,
@@ -78,7 +84,9 @@ function load() {
 }
 
 let state = load();
+let index = buildIndex(state);
 const listeners = new Set();
+const changeListeners = new Set();
 
 export function getState() {
   return state;
@@ -92,11 +100,33 @@ export function persist() {
   }
 }
 
+function track() {
+  const result = trackChanges(index, state);
+  index = result.index;
+  if (result.changed) changeListeners.forEach((l) => l(state));
+}
+
 /** Zustand ändern: fn bekommt den Entwurf und mutiert ihn. */
 export function update(fn, { silent = false } = {}) {
   fn(state);
+  track();
   persist();
   if (!silent) listeners.forEach((l) => l(state));
+}
+
+/** Benachrichtigt bei Änderungen, die synchronisiert werden müssen. */
+export function onLocalChange(fn) {
+  changeListeners.add(fn);
+  return () => changeListeners.delete(fn);
+}
+
+/** Stand aus der Cloud übernehmen – ohne neue Zeitstempel zu erzeugen. */
+export function applyRemote(payload) {
+  applyPayload(state, payload);
+  state = migrate(merge(defaultState(), state));
+  index = buildIndex(state);
+  persist();
+  listeners.forEach((l) => l(state));
 }
 
 export function subscribe(fn) {
@@ -106,6 +136,7 @@ export function subscribe(fn) {
 
 export function replaceState(next) {
   state = migrate(merge(defaultState(), next));
+  track(); // Ersetzen zählt als Änderung (Grabsteine für Entferntes)
   persist();
   listeners.forEach((l) => l(state));
 }

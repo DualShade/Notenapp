@@ -13,8 +13,26 @@ export function gradesFor(subjectId, halbjahr = getState().settings.halbjahr) {
   return getState().grades.filter((g) => g.subjectId === subjectId && g.halbjahr === halbjahr);
 }
 
-export function averageFor(subject, halbjahr) {
-  return subjectAverage(gradesFor(subject.id, halbjahr), subjectWeights(subject));
+export function finalFor(subjectId, halbjahr = getState().settings.halbjahr) {
+  return getState().finals.find((f) => f.subjectId === subjectId && f.halbjahr === halbjahr)?.points ?? null;
+}
+
+/**
+ * Schnitt eines Fachs im Halbjahr. `average` ist die eingetragene Zeugnisnote,
+ * falls vorhanden, sonst der berechnete Schnitt (`computed`).
+ */
+export function averageFor(subject, halbjahr = getState().settings.halbjahr) {
+  const result = subjectAverage(gradesFor(subject.id, halbjahr), subjectWeights(subject));
+  const final = finalFor(subject.id, halbjahr);
+  return { ...result, computed: result.average, final, average: final ?? result.average };
+}
+
+export function setFinal(subjectId, halbjahr, points) {
+  update((s) => {
+    const id = `${subjectId}|${halbjahr}`;
+    s.finals = s.finals.filter((f) => f.id !== id);
+    if (points != null) s.finals.push({ id, subjectId, halbjahr, points });
+  });
 }
 
 export function activeSubjects() {

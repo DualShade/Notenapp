@@ -36,6 +36,7 @@ jobs:
       - run: npm run build
         env:
           PROXY_URL: ${{ vars.PROXY_URL }}
+          API_URL: ${{ vars.API_URL }}
 
       - id: pages
         uses: actions/configure-pages@v5

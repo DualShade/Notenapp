@@ -1,10 +1,11 @@
 import { h, icon, empty, formatDate } from '../ui.js';
-import { getState, kindOf, subjectWeights } from '../store.js';
-import { overallAverage, GRADE_TYPES, GROUP_LABELS, pointsTone, formatPoints, pointsLabel, weightPercent, formatRatio } from '../grades.js';
+import { getState, update, kindOf, subjectWeights } from '../store.js';
+import { overallAverage, GRADE_TYPES, GROUP_LABELS, pointsTone, formatPoints, pointsLabel, weightPercent, requiredPoints, effectivePoints, POINT_LABELS } from '../grades.js';
+import { openHomeworkEditor, homeworkRow } from './homework.js';
 import { todayIso } from '../timetable.js';
 import {
   activeSubjects, averageFor, kindBadge, colorDot, pointsPill, averageBlock, gradesFor,
-  openGradeEditor, openSubjectEditor, openKlausurEditor, subjectById, klausurRow,
+  openGradeEditor, openSubjectEditor, openKlausurEditor, subjectById, klausurRow, setFinal,
 } from './common.js';
 
 export function subjectsView() {
@@ -54,7 +55,7 @@ export function subjectDetailView(id) {
   const subject = subjectById(id);
   if (!subject) return h('div', { class: 'view' }, empty('Fach nicht gefunden', null, h('a', { class: 'btn', href: '#/faecher' }, 'Zurück')));
   const grades = gradesFor(subject.id).sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
-  const { average, parts } = averageFor(subject);
+  const { average, parts, computed, final } = averageFor(subject);
   const weights = subjectWeights(subject);
   const today = todayIso();
   const upcoming = state.klausuren.filter((k) => k.subjectId === subject.id && k.date >= today).sort((a, b) => a.date.localeCompare(b.date));
@@ -90,14 +91,68 @@ export function subjectDetailView(id) {
         subject.hours != null ? `${String(subject.hours).replace('.', ',')} Wochenstunden` : null,
         subject.teachers?.length ? subject.teachers.join(', ') : null,
       ].filter(Boolean).join(' · ')),
-      averageBlock(average, `Schnitt ${state.settings.halbjahr}`),
+      averageBlock(average, final != null ? `Zeugnisnote ${state.settings.halbjahr} · berechnet ${formatPoints(computed)}` : `Schnitt ${state.settings.halbjahr}`),
       otherHalbjahre.length ? h('div', { class: 'row gap wrap small' }, otherHalbjahre.map((x) => h('span', { class: 'chip' }, `${x.hj}: ${formatPoints(x.avg)} P`))) : null),
     h('button', { class: 'btn primary block', onclick: () => openGradeEditor(subject.id) }, icon('plus', 18), 'Note eintragen'),
     groupList('schriftlich'),
     groupList('muendlich'),
+    goalCard(subject, grades, weights, computed),
+    finalCard(subject, computed, final),
+    subjectHomework(subject),
     h('section', { class: 'card' },
       h('div', { class: 'card-head' },
         h('h3', { class: 'card-title' }, 'Anstehende Termine'),
         h('button', { class: 'icon-btn', 'aria-label': 'Termin hinzufügen', onclick: () => openKlausurEditor(null, { subjectId: subject.id }) }, icon('plus'))),
       upcoming.length ? h('div', { class: 'list' }, upcoming.map((k) => klausurRow(k, today))) : h('p', { class: 'muted small' }, 'Keine Termine.')));
+}
+
+/** Wunschnote: was brauche ich in der nächsten Klausur / mündlich? */
+function goalCard(subject, grades, weights, computed) {
+  const goal = subject.goal ?? null;
+  const select = h('select', { class: 'small-select', 'aria-label': 'Ziel', onchange: (e) => update((s) => {
+    const x = s.subjects.find((y) => y.id === subject.id);
+    if (x) x.goal = e.target.value === '' ? null : Number(e.target.value);
+  }) },
+  h('option', { value: '', selected: goal == null }, 'kein Ziel'),
+  Array.from({ length: 15 }, (_, i) => 15 - i).map((p) => h('option', { value: p, selected: goal === p }, `${p} P (${POINT_LABELS[p]})`)));
+  let body = h('p', { class: 'muted small' }, 'Wähle eine Wunschnote – die App rechnet aus, was du in der nächsten Klausur oder mündlich brauchst.');
+  if (goal != null) {
+    const line = (group, label) => {
+      const x = requiredPoints(grades, weights, goal - 0.5, group); // ab x,5 wird aufgerundet
+      if (x <= 0) return h('li', {}, h('strong', {}, label), ': Ziel ist sicher – selbst mit 0 Punkten.');
+      if (x > 15) return h('li', {}, h('strong', {}, label), `: mit einer Note nicht erreichbar (bräuchte ${formatPoints(x)} P).`);
+      const need = Math.ceil(x - 1e-9);
+      return h('li', {}, h('strong', {}, label), ': mindestens ', h('span', { class: `pill ${pointsTone(need)}` }, `${need} P`), ` (${POINT_LABELS[need]})`);
+    };
+    body = h('div', { class: 'stack' },
+      h('p', { class: 'small' }, computed == null ? `Ziel: ${goal} Punkte.` : `Aktuell ${formatPoints(computed)} P – Ziel ${goal} P ${computed >= goal - 0.5 ? '✅ erreicht' : ''}`),
+      h('ul', { class: 'goal-list' },
+        line('schriftlich', 'Nächste Klausur'),
+        line('muendlich', 'Nächste mündliche Note')));
+  }
+  return h('section', { class: 'card' },
+    h('div', { class: 'card-head' }, h('h3', { class: 'card-title' }, icon('target', 18), ' Wunschnote'), select),
+    body);
+}
+
+/** Zeugnisnote (Halbjahresnote) – automatisch gerundet oder manuell. */
+function finalCard(subject, computed, final) {
+  const hj = getState().settings.halbjahr;
+  const auto = effectivePoints(computed, null);
+  return h('section', { class: 'card' },
+    h('div', { class: 'card-head' },
+      h('h3', { class: 'card-title' }, `Zeugnisnote ${hj}`),
+      h('select', { class: 'small-select', 'aria-label': 'Zeugnisnote', onchange: (e) => setFinal(subject.id, hj, e.target.value === '' ? null : Number(e.target.value)) },
+        h('option', { value: '', selected: final == null }, auto == null ? 'noch offen' : `automatisch (${auto} P)`),
+        Array.from({ length: 16 }, (_, i) => 15 - i).map((p) => h('option', { value: p, selected: final === p }, `${p} P (${POINT_LABELS[p]})`)))),
+    h('p', { class: 'muted small' }, 'Trag hier die Note aus dem Zeugnis ein, sobald du sie kennst. Sie zählt dann für Gesamtschnitt und Abi-Rechner.'));
+}
+
+function subjectHomework(subject) {
+  const open = getState().homework.filter((x) => x.subjectId === subject.id && !x.done).sort((a, b) => a.due.localeCompare(b.due));
+  return h('section', { class: 'card' },
+    h('div', { class: 'card-head' },
+      h('h3', { class: 'card-title' }, 'Hausaufgaben'),
+      h('button', { class: 'icon-btn', 'aria-label': 'Hausaufgabe hinzufügen', onclick: () => openHomeworkEditor(null, { subjectId: subject.id }) }, icon('plus'))),
+    open.length ? h('div', { class: 'list' }, open.map((x) => homeworkRow(x))) : h('p', { class: 'muted small' }, 'Keine offenen Hausaufgaben.'));
 }

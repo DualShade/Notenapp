@@ -1,8 +1,10 @@
 import { h, icon, empty, openModal, formatDate, formatDateTime, toast } from '../ui.js';
 import { getState, update } from '../store.js';
-import { mondayKey, addDaysIso, todayIso, weekMatrix, slotSpan } from '../timetable.js';
+import { mondayKey, addDaysIso, todayIso, weekMatrix, slotSpan, minutesOf } from '../timetable.js';
 import { currentTimetable, currentCourses, subjectForLesson, untisAccount, refreshUntis, server } from '../data.js';
 import { openUntisConnect } from './untis-connect.js';
+import { openHomeworkEditor, nextLessonDate } from './homework.js';
+import { openAbsenceEditor } from './absences.js';
 import { kindBadge, colorDot } from './common.js';
 import { loadDemo } from '../demo.js';
 
@@ -23,7 +25,10 @@ function lessonDetails(lesson) {
   openModal(subject?.name ?? lesson.subject?.long ?? lesson.courseKey, h('div', { class: 'stack' },
     subject ? h('div', { class: 'row gap center' }, colorDot(subject), kindBadge(subject), h('span', { class: 'muted' }, subject.hours != null ? `${String(subject.hours).replace('.', ',')} Wochenstunden` : '')) : null,
     h('dl', { class: 'details' }, rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])),
-    subject ? h('a', { class: 'btn primary', href: `#/fach/${subject.id}`, onclick: () => document.querySelector('dialog')?.close() }, 'Zum Fach') : null));
+    subject ? h('div', { class: 'row gap wrap' },
+      h('a', { class: 'btn primary', href: `#/fach/${subject.id}`, onclick: () => document.querySelector('dialog')?.close() }, 'Zum Fach'),
+      h('button', { class: 'btn', onclick: () => { document.querySelector('dialog')?.close(); openHomeworkEditor(null, { subjectId: subject.id, due: nextLessonDate(subject.id, lesson.date) ?? lesson.date }); } }, icon('plus', 16), 'Hausaufgabe'),
+      h('button', { class: 'btn ghost', onclick: () => { document.querySelector('dialog')?.close(); openAbsenceEditor(null, { subjectId: subject.id, date: lesson.date, lessons: lesson.lessonUnits ?? Math.max(1, Math.round((minutesOf(lesson.end) - minutesOf(lesson.start)) / 45)) }); } }, 'Gefehlt')) : null));
 }
 
 function lessonChip(lesson) {

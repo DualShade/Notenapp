@@ -4,6 +4,7 @@ import { getState, update, uid, replaceState, defaultState } from './store.js';
 import { normalizeTimetable, mondayKey, todayIso, addDaysIso } from './timetable.js';
 import { syncSubjectsWithTimetable } from './data.js';
 import { confirmDialog, toast } from './ui.js';
+import { getAccount } from './sync.js';
 
 const COURSES = {
   'M-L1': ['M', 'Mathematik', 'SCH', 'A104'],
@@ -62,6 +63,10 @@ export function demoTimetable(now = new Date()) {
 
 export async function loadDemo() {
   const state = getState();
+  if (getAccount()) {
+    toast('Die Demo würde deine Cloud-Daten überschreiben. Melde dich dafür zuerst ab.', 'error');
+    return;
+  }
   if (state.subjects.length && !(await confirmDialog('Demo-Daten ersetzen deine aktuellen Fächer und Noten. Fortfahren?', { ok: 'Demo laden' }))) return;
   const base = defaultState();
   base.settings = { ...state.settings };
@@ -83,6 +88,10 @@ export async function loadDemo() {
     );
     const k = (short, days, info) => ({ id: uid(), subjectId: pick(short), date: addDaysIso(today, days), title: 'Klausur', info, source: 'manual', halbjahr: s.settings.halbjahr });
     s.klausuren.push(k('M', 6, '1.–3. Std.'), k('D', 9, '3.–4. Std.'), k('PH', 13, '1.–3. Std.'), k('E', 20, '5.–6. Std.'));
+    const hw = (short, days, title, done = false) => ({ id: uid(), subjectId: pick(short), title, due: addDaysIso(today, days), done, notes: '', createdAt: Date.now() });
+    s.homework.push(hw('M', 1, 'S. 112 Nr. 4a–d'), hw('E', 2, 'Vokabeln Unit 3'), hw('D', -1, 'Gedichtanalyse fertig schreiben'), hw('PH', 5, 'Protokoll Versuch 2'), hw('GE', -3, 'Quelle M4 lesen', true));
+    s.absences.push({ id: uid(), date: addDaysIso(today, -12), subjectId: null, lessons: 6, excused: true, note: 'krank' }, { id: uid(), date: addDaysIso(today, -4), subjectId: pick('SP'), lessons: 2, excused: false, note: '' });
+    s.subjects.find((x) => x.short === 'M').goal = 13;
   });
   toast('Demo geladen – M und PH wurden über 5 Wochenstunden als LK erkannt.', 'success');
   location.hash = '#/';

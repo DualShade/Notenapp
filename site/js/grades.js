@@ -168,3 +168,30 @@ export function scaleTable(scale, maxPoints, step = 0.5) {
 export function averageOf(values) {
   return mean(values);
 }
+
+/**
+ * Wunschnote: Welche Punktzahl braucht die nächste Note der Gruppe `group`,
+ * damit der Fachschnitt `target` erreicht? Ergebnis ungerundet (kann < 0 oder > 15 sein).
+ */
+export function requiredPoints(grades, weights, target, group, weight = 1) {
+  const sums = { schriftlich: { sum: 0, w: 0 }, muendlich: { sum: 0, w: 0 } };
+  for (const g of grades) {
+    const gr = GRADE_TYPES[g.type]?.group ?? 'muendlich';
+    sums[gr].sum += g.points * (g.weight ?? 1);
+    sums[gr].w += g.weight ?? 1;
+  }
+  const other = group === 'schriftlich' ? 'muendlich' : 'schriftlich';
+  const wg = Number(weights[group] ?? 1);
+  const wo = Number(weights[other] ?? 1);
+  const otherAvg = sums[other].w ? sums[other].sum / sums[other].w : null;
+  // Ziel-Gruppenschnitt, den die Gruppe nach der neuen Note haben muss
+  const neededGroupAvg = otherAvg == null || wo === 0 ? target : (target * (wg + wo) - wo * otherAvg) / wg;
+  const s = sums[group];
+  return (neededGroupAvg * (s.w + weight) - s.sum) / weight;
+}
+
+/** Zeugnisnote eines Halbjahres: manuell gesetzt oder gerundeter Schnitt. */
+export function effectivePoints(average, finalPoints) {
+  if (finalPoints != null) return finalPoints;
+  return average == null ? null : Math.round(average);
+}

@@ -7,6 +7,7 @@ import {
 } from '../data.js';
 import { activeSubjects, subjectById, klausurRow, openKlausurEditor, openGradeEditor, colorDot } from './common.js';
 import { klausurKey } from '../klausur-parser.js';
+import { downloadIcs } from '../ics.js';
 
 /** Vorschau-Liste: Benutzer wählt aus, welche Termine übernommen werden. */
 function previewList(source, close) {
@@ -137,7 +138,8 @@ export function klausurenView() {
   return h('div', { class: 'view' },
     h('div', { class: 'row gap wrap' },
       h('button', { class: 'btn primary', onclick: () => openKlausurImport() }, icon('file', 18), 'Klausurplan importieren'),
-      h('button', { class: 'btn ghost', onclick: () => openKlausurEditor() }, icon('plus', 18), 'Termin')),
+      h('button', { class: 'btn ghost', onclick: () => openKlausurEditor() }, icon('plus', 18), 'Termin'),
+      h('button', { class: 'btn ghost', title: 'Klausuren & Hausaufgaben als Kalender-Datei', onclick: () => downloadIcs(getState()) }, icon('calendar', 18), 'In Kalender')),
     server.klausuren ? h('p', { class: 'muted small' },
       'Klausurplan der Homepage: ',
       h('a', { href: server.klausuren.pdfUrl, target: '_blank', rel: 'noopener' }, server.klausuren.linkText || 'PDF öffnen'),

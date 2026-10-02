@@ -4,6 +4,7 @@ import { server, hasProxy, syncSubjectsWithTimetable, untisAccount, refreshUntis
 import { openUntisConnect } from './untis-connect.js';
 import { APP_CONFIG } from '../config.js';
 import { ratioInput } from './common.js';
+import { getAccount } from '../sync.js';
 import { openKlausurImport } from './klausuren.js';
 import { loadDemo } from '../demo.js';
 
@@ -177,6 +178,9 @@ export function settingsView() {
         h('label', { class: 'btn' }, icon('upload', 18), 'Sicherung laden', h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onchange: (e) => importData(e.target.files[0]) })),
         h('button', { class: 'btn ghost', onclick: loadDemo }, 'Demo-Daten'),
         h('button', { class: 'btn danger ghost', onclick: async () => {
-          if (await confirmDialog('Alle Noten, Fächer und Einstellungen auf diesem Gerät löschen?')) { resetState(); toast('Alles zurückgesetzt.'); }
+          const msg = getAccount()
+            ? 'Alle Noten, Fächer und Einstellungen löschen? Du bist angemeldet – die Daten werden auch in der Cloud und auf deinen anderen Geräten gelöscht.'
+            : 'Alle Noten, Fächer und Einstellungen auf diesem Gerät löschen?';
+          if (await confirmDialog(msg)) { resetState(); toast('Alles zurückgesetzt.'); }
         } }, icon('trash', 18), 'Alles löschen'))));
 }

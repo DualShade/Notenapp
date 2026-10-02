@@ -1,21 +1,46 @@
 import { h, icon, toast } from './ui.js';
 import { getState, subscribe, update } from './store.js';
 import { loadServerData, syncSubjectsWithTimetable, autoImportFromServer, untisAccount, hasProxy, refreshUntis } from './data.js';
+import { startSync, onSyncStatus, syncStatus, getAccount } from './sync.js';
 import { overviewView } from './views/overview.js';
 import { subjectsView, subjectDetailView } from './views/subjects.js';
 import { timetableView } from './views/timetable-view.js';
-import { klausurenView } from './views/klausuren.js';
+import { tasksView } from './views/tasks.js';
+import { moreView } from './views/more.js';
 import { schluesselView } from './views/schluessel.js';
 import { settingsView } from './views/settings.js';
+import { accountView, resetView } from './views/account.js';
+import { absencesView } from './views/absences.js';
+import { statsView } from './views/stats.js';
+import { abiView } from './views/abi.js';
+import { printView } from './views/print.js';
 
 const TABS = [
-  { path: '', label: 'Übersicht', icon: 'home', view: overviewView },
-  { path: 'faecher', label: 'Fächer', icon: 'book', view: subjectsView },
-  { path: 'plan', label: 'Plan', icon: 'calendar', view: timetableView },
-  { path: 'klausuren', label: 'Klausuren', icon: 'clipboard', view: klausurenView },
-  { path: 'schluessel', label: 'Schlüssel', icon: 'key', view: schluesselView },
+  { path: '', label: 'Übersicht', icon: 'home' },
+  { path: 'faecher', label: 'Fächer', icon: 'book' },
+  { path: 'plan', label: 'Plan', icon: 'calendar' },
+  { path: 'aufgaben', label: 'Aufgaben', icon: 'clipboard' },
+  { path: 'mehr', label: 'Mehr', icon: 'grid' },
 ];
-const TITLES = { '': 'Notenapp', faecher: 'Fächer', fach: 'Fach', plan: 'Stundenplan', klausuren: 'Klausuren', schluessel: 'Notenschlüssel', einstellungen: 'Einstellungen' };
+
+// Route → [Titel, Ansicht, aktiver Tab]
+const ROUTES = {
+  '': ['Notenapp', () => overviewView(), ''],
+  faecher: ['Fächer', () => subjectsView(), 'faecher'],
+  fach: ['Fach', (p) => subjectDetailView(p), 'faecher'],
+  plan: ['Stundenplan', () => timetableView(), 'plan'],
+  aufgaben: ['Aufgaben', (p) => tasksView(p), 'aufgaben'],
+  klausuren: ['Aufgaben', () => tasksView('klausuren'), 'aufgaben'],
+  mehr: ['Mehr', () => moreView(), 'mehr'],
+  statistik: ['Statistik', () => statsView(), 'mehr'],
+  abi: ['Abi-Rechner', () => abiView(), 'mehr'],
+  schluessel: ['Notenschlüssel', () => schluesselView(), 'mehr'],
+  fehlzeiten: ['Fehlzeiten', () => absencesView(), 'mehr'],
+  druck: ['Notenübersicht', () => printView(), 'mehr'],
+  einstellungen: ['Einstellungen', () => settingsView(), 'mehr'],
+  konto: ['Konto', () => accountView(), 'mehr'],
+  passwort: ['Neues Passwort', (p) => resetView(p), 'mehr'],
+};
 
 const main = document.getElementById('main');
 const header = document.getElementById('header');
@@ -23,7 +48,7 @@ const nav = document.getElementById('nav');
 
 function route() {
   const [, path = '', param] = location.hash.replace(/^#/, '').split('/');
-  return { path, param };
+  return ROUTES[path] ? { path, param } : { path: '', param: null };
 }
 
 function applyTheme() {
@@ -32,20 +57,28 @@ function applyTheme() {
   else document.documentElement.setAttribute('data-theme', theme);
 }
 
+function syncIcon() {
+  const account = getAccount();
+  const st = syncStatus();
+  const name = !account ? 'cloudOff' : st.state === 'syncing' ? 'refresh' : st.state === 'error' || st.state === 'offline' ? 'alert' : 'cloud';
+  const label = !account ? 'Nicht angemeldet – Daten nur auf diesem Gerät' : { syncing: 'Synchronisiere …', error: `Sync-Fehler: ${st.error}`, offline: 'Offline' }[st.state] ?? 'Synchronisiert';
+  return h('a', { class: `icon-btn sync-icon ${account ? st.state : 'signed-out'}`, href: '#/konto', 'aria-label': label, title: label }, icon(name));
+}
+
 function renderHeader({ path }) {
   const { settings } = getState();
   header.replaceChildren(
-    h('h1', {}, TITLES[path] ?? 'Notenapp'),
+    h('h1', {}, ROUTES[path][0]),
     h('div', { class: 'row gap center' },
       h('select', {
         class: 'halbjahr-select', 'aria-label': 'Halbjahr',
         onchange: (e) => update((s) => { s.settings.halbjahr = e.target.value; }),
       }, settings.halbjahre.map((hj) => h('option', { value: hj, selected: hj === settings.halbjahr }, hj))),
-      h('a', { class: `icon-btn${path === 'einstellungen' ? ' active' : ''}`, href: '#/einstellungen', 'aria-label': 'Einstellungen' }, icon('settings'))));
+      syncIcon()));
 }
 
 function renderNav({ path }) {
-  const active = path === 'fach' ? 'faecher' : path;
+  const active = ROUTES[path][2];
   nav.replaceChildren(...TABS.map((t) => h('a', {
     href: `#/${t.path}`,
     class: `tab${active === t.path ? ' active' : ''}`,
@@ -59,10 +92,7 @@ function render() {
   applyTheme();
   renderHeader(r);
   renderNav(r);
-  let view;
-  if (r.path === 'fach') view = subjectDetailView(r.param);
-  else if (r.path === 'einstellungen') view = settingsView();
-  else view = (TABS.find((t) => t.path === r.path) ?? TABS[0]).view();
+  const view = ROUTES[r.path][1](r.param);
   const scroll = window.scrollY;
   main.replaceChildren(view);
   // Beim Seitenwechsel nach oben, bei Re-Render Position halten
@@ -99,6 +129,13 @@ async function refresh({ quiet = true } = {}) {
 }
 
 subscribe(render);
+// Sync-Status: nur das Symbol aktualisieren (kein Neuaufbau mitten im Tippen),
+// auf der Konto-Seite die ganze Ansicht.
+onSyncStatus(() => {
+  const r = route();
+  if (r.path === 'konto' || r.path === 'mehr') render();
+  else header.querySelector('.sync-icon')?.replaceWith(syncIcon());
+});
 window.addEventListener('hashchange', render);
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 // Beim Zurückkehren in die App frische Daten holen (immer aktuell)
@@ -108,6 +145,7 @@ document.addEventListener('visibilitychange', () => {
 
 render();
 refresh();
+startSync();
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   // Neue Version aktiv → einmal neu laden, damit sie sofort benutzt wird.

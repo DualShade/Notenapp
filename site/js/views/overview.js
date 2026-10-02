@@ -7,6 +7,7 @@ import { activeSubjects, averageFor, averageBlock, colorDot, pointsPill, kindBad
 import { openKlausurImport } from './klausuren.js';
 import { loadDemo } from '../demo.js';
 import { openUntisConnect } from './untis-connect.js';
+import { openHomeworkEditor, homeworkRow, openHomework } from './homework.js';
 
 function nextSchoolDay(timetable, today) {
   if (!timetable) return null;
@@ -73,8 +74,11 @@ export function overviewView() {
         h('div', {}, h('span', { class: 'muted' }, 'LKs'), h('strong', {}, formatPoints(lk))),
         h('div', {}, h('span', { class: 'muted' }, 'GKs'), h('strong', {}, formatPoints(gk))),
         h('div', {}, h('span', { class: 'muted' }, 'Noten'), h('strong', {}, String(averages.reduce((a, b) => a + b.count, 0)))))),
-    h('button', { class: 'btn primary block', onclick: () => openGradeEditor(null) }, icon('plus', 18), 'Note eintragen'),
+    h('div', { class: 'grid-2' },
+      h('button', { class: 'btn primary', onclick: () => openGradeEditor(null) }, icon('plus', 18), 'Note'),
+      h('button', { class: 'btn', onclick: () => openHomeworkEditor() }, icon('plus', 18), 'Hausaufgabe')),
     dayCard(timetable, today),
+    homeworkCard(today),
     h('section', { class: 'card' },
       h('div', { class: 'card-head' },
         h('h3', { class: 'card-title' }, 'Nächste Klausuren'),
@@ -91,4 +95,15 @@ export function overviewView() {
     h('p', { class: 'muted small center' },
       timetable ? `Stundenplan: ${formatDateTime(timetable.fetchedAt)} (${timetable.origin === 'live' ? 'Live-Import' : 'automatisch'})` : 'Kein Stundenplan geladen',
       server.klausuren ? ` · Klausurplan: ${formatDateTime(server.klausuren.fetchedAt)}` : ''));
+}
+
+function homeworkCard(today) {
+  const open = openHomework();
+  if (!open.length) return null;
+  const overdue = open.filter((x) => x.due < today).length;
+  return h('section', { class: 'card' },
+    h('div', { class: 'card-head' },
+      h('h3', { class: 'card-title' }, `Hausaufgaben (${open.length})`, overdue ? h('span', { class: 'tag danger' }, `${overdue} überfällig`) : null),
+      h('a', { class: 'link', href: '#/aufgaben/hausaufgaben' }, 'Alle')),
+    h('div', { class: 'list' }, open.slice(0, 4).map((x) => homeworkRow(x, today))));
 }

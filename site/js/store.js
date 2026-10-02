@@ -16,15 +16,16 @@ function defaultHalbjahr(now = new Date()) {
 
 export function defaultState() {
   return {
-    version: 1,
+    version: 2,
     settings: {
       halbjahre: ['EF.1', 'EF.2', 'Q1.1', 'Q1.2', 'Q2.1', 'Q2.2'],
       halbjahr: defaultHalbjahr(),
       lkThreshold: DEFAULT_LK_THRESHOLD,
       lkDouble: false,
+      // Verhältnis schriftlich : mündlich (Sonstige Mitarbeit)
       weights: {
-        LK: { schriftlich: 50, muendlich: 50 },
-        GK: { schriftlich: 50, muendlich: 50 },
+        LK: { schriftlich: 2, muendlich: 1 },
+        GK: { schriftlich: 1, muendlich: 1 },
       },
       scalePreset: 'abitur',
       customScale: null,
@@ -53,10 +54,23 @@ function merge(base, saved) {
   return out;
 }
 
+const isFiftyFifty = (w) => w?.schriftlich === 50 && w?.muendlich === 50;
+
+/** Ältere Stände auf das aktuelle Format bringen. */
+export function migrate(s) {
+  if ((s.version ?? 1) < 2) {
+    // v1 hatte 50/50 für alle als Standard; nur unveränderte Standards umstellen
+    if (isFiftyFifty(s.settings.weights?.LK)) s.settings.weights.LK = { schriftlich: 2, muendlich: 1 };
+    if (isFiftyFifty(s.settings.weights?.GK)) s.settings.weights.GK = { schriftlich: 1, muendlich: 1 };
+    s.version = 2;
+  }
+  return s;
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return merge(defaultState(), JSON.parse(raw));
+    if (raw) return migrate(merge(defaultState(), JSON.parse(raw)));
   } catch {
     // Speicher nicht verfügbar oder kaputt → frisch starten
   }
@@ -91,7 +105,7 @@ export function subscribe(fn) {
 }
 
 export function replaceState(next) {
-  state = merge(defaultState(), next);
+  state = migrate(merge(defaultState(), next));
   persist();
   listeners.forEach((l) => l(state));
 }
@@ -114,7 +128,7 @@ export function activeScale(settings = state.settings) {
 }
 
 export function subjectWeights(subject, settings = state.settings) {
-  return subject?.weights ?? settings.weights[kindOf(subject)] ?? { schriftlich: 50, muendlich: 50 };
+  return subject?.weights ?? settings.weights[kindOf(subject)] ?? { schriftlich: 1, muendlich: 1 };
 }
 
 export function nextColor(subjects) {

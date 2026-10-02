@@ -1,6 +1,6 @@
 import { h, icon, empty, formatDate } from '../ui.js';
 import { getState, kindOf, subjectWeights } from '../store.js';
-import { overallAverage, GRADE_TYPES, GROUP_LABELS, pointsTone, formatPoints, pointsLabel } from '../grades.js';
+import { overallAverage, GRADE_TYPES, GROUP_LABELS, pointsTone, formatPoints, pointsLabel, weightPercent, formatRatio } from '../grades.js';
 import { todayIso } from '../timetable.js';
 import {
   activeSubjects, averageFor, kindBadge, colorDot, pointsPill, averageBlock, gradesFor,
@@ -67,7 +67,7 @@ export function subjectDetailView(id) {
     const items = grades.filter((g) => (GRADE_TYPES[g.type]?.group ?? 'muendlich') === group);
     return h('section', { class: 'card' },
       h('div', { class: 'card-head' },
-        h('h3', { class: 'card-title' }, GROUP_LABELS[group], h('span', { class: 'muted' }, ` · ${weights[group]} %`)),
+        h('h3', { class: 'card-title' }, GROUP_LABELS[group], h('span', { class: 'muted' }, ` · ${weightPercent(weights, group)} %`)),
         pointsPill(parts[group])),
       items.length
         ? h('div', { class: 'list' }, items.map((g) => h('button', { class: 'list-item', onclick: () => openGradeEditor(subject.id, g) },

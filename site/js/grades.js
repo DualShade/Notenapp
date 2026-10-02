@@ -97,7 +97,7 @@ function weightedMean(items) {
  * Schnitt eines Fachs: Schriftlich und Sonstige Mitarbeit werden getrennt
  * gemittelt und dann gewichtet. Fehlt eine Gruppe, zählt nur die andere.
  */
-export function subjectAverage(grades, weights = { schriftlich: 50, muendlich: 50 }) {
+export function subjectAverage(grades, weights = { schriftlich: 1, muendlich: 1 }) {
   const groups = { schriftlich: [], muendlich: [] };
   for (const g of grades) {
     const group = GRADE_TYPES[g.type]?.group ?? 'muendlich';
@@ -109,11 +109,23 @@ export function subjectAverage(grades, weights = { schriftlich: 50, muendlich: 5
   let total = 0;
   for (const [group, avg] of Object.entries(parts)) {
     if (avg == null) continue;
-    const w = Number(weights[group] ?? 50);
+    const w = Number(weights[group] ?? 1);
     sum += avg * w;
     total += w;
   }
   return { average: total ? sum / total : null, parts, count: grades.length };
+}
+
+/** Anteil einer Gruppe in Prozent, z. B. 2:1 → schriftlich 67 %. */
+export function weightPercent(weights, group) {
+  const total = Number(weights.schriftlich) + Number(weights.muendlich);
+  return total > 0 ? Math.round((Number(weights[group]) / total) * 100) : 0;
+}
+
+/** "2 : 1" (Kommazahlen mit Komma). */
+export function formatRatio(weights) {
+  const f = (n) => String(Math.round(Number(n) * 100) / 100).replace('.', ',');
+  return `${f(weights.schriftlich)} : ${f(weights.muendlich)}`;
 }
 
 /** Gesamtschnitt über Fächer; LKs optional doppelt gewichtet. */

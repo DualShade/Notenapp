@@ -3,6 +3,7 @@ import { getState, update, replaceState, resetState } from '../store.js';
 import { server, hasProxy, syncSubjectsWithTimetable, untisAccount, refreshUntis, disconnectUntis, currentTimetable } from '../data.js';
 import { openUntisConnect } from './untis-connect.js';
 import { APP_CONFIG } from '../config.js';
+import { ratioInput } from './common.js';
 import { openKlausurImport } from './klausuren.js';
 import { loadDemo } from '../demo.js';
 
@@ -126,11 +127,13 @@ export function settingsView() {
             }
           }),
         }), 'Kommagetrennt')),
-      h('div', { class: 'grid-2' },
-        field('LK: % schriftlich', h('input', { type: 'number', min: '0', max: '100', step: '5', value: settings.weights.LK.schriftlich,
-          onchange: (e) => update((s) => { const v = Math.min(100, Math.max(0, Number(e.target.value) || 0)); s.settings.weights.LK = { schriftlich: v, muendlich: 100 - v }; }) }), 'Rest: Sonstige Mitarbeit'),
-        field('GK: % schriftlich', h('input', { type: 'number', min: '0', max: '100', step: '5', value: settings.weights.GK.schriftlich,
-          onchange: (e) => update((s) => { const v = Math.min(100, Math.max(0, Number(e.target.value) || 0)); s.settings.weights.GK = { schriftlich: v, muendlich: 100 - v }; }) }), 'Rest: Sonstige Mitarbeit')),
+      h('div', { class: 'field' },
+        h('span', { class: 'field-label' }, 'Leistungskurse: schriftlich : mündlich'),
+        ratioInput(settings.weights.LK, (w) => update((s) => { s.settings.weights.LK = w; }, { silent: true }))),
+      h('div', { class: 'field' },
+        h('span', { class: 'field-label' }, 'Grundkurse: schriftlich : mündlich'),
+        ratioInput(settings.weights.GK, (w) => update((s) => { s.settings.weights.GK = w; }, { silent: true })),
+        h('small', { class: 'hint' }, 'Abweichende Fächer stellst du im Fach unter „Bearbeiten“ ein.')),
       toggle('lkDouble', 'LKs im Gesamtschnitt doppelt gewichten', 'Wie bei der Abiturberechnung.')),
 
     h('section', { class: 'card' },

@@ -2,7 +2,7 @@
 
 import { h, icon, openModal, field, toast, confirmDialog, formatDate } from '../ui.js';
 import { getState, update, uid, kindOf, subjectWeights, nextColor, SUBJECT_COLORS } from '../store.js';
-import { subjectAverage, pointsTone, formatPoints, formatNoteValue, pointsLabel, POINT_LABELS, GRADE_TYPES } from '../grades.js';
+import { subjectAverage, pointsTone, formatPoints, formatNoteValue, pointsLabel, POINT_LABELS, GRADE_TYPES, weightPercent, formatRatio } from '../grades.js';
 import { todayIso } from '../timetable.js';
 
 export function subjectById(id) {
@@ -108,6 +108,46 @@ export function openGradeEditor(subjectId, grade = null, preset = {}) {
   });
 }
 
+const RATIO_PRESETS = [[1, 1], [2, 1], [3, 1], [1, 2]];
+
+/**
+ * Eingabe "Schriftlich : Mündlich" als Verhältnis (z. B. 2 : 1) mit Schnellwahl.
+ * Gibt ein Element zurück; el.setValue(w) und el.setDisabled(bool) steuern es von außen.
+ */
+export function ratioInput(weights, onChange, { disabled = false } = {}) {
+  let value = { schriftlich: Number(weights.schriftlich), muendlich: Number(weights.muendlich) };
+  const num = (key) => h('input', {
+    type: 'number', min: '0', step: '0.5', inputmode: 'decimal', class: 'ratio-num', 'aria-label': key === 'schriftlich' ? 'Schriftlich' : 'Mündlich',
+    oninput: (e) => {
+      const v = Math.max(0, Number(String(e.target.value).replace(',', '.')) || 0);
+      value = { ...value, [key]: v };
+      if (value.schriftlich + value.muendlich > 0) { onChange({ ...value }); sync(false); }
+    },
+  });
+  const sInput = num('schriftlich');
+  const mInput = num('muendlich');
+  const hint = h('small', { class: 'hint' });
+  const presets = RATIO_PRESETS.map(([a, b]) => h('button', {
+    type: 'button', class: 'chip-btn',
+    onclick: () => { value = { schriftlich: a, muendlich: b }; onChange({ ...value }); sync(true); },
+  }, `${a}:${b}`));
+  const sync = (inputs) => {
+    if (inputs) { sInput.value = value.schriftlich; mInput.value = value.muendlich; }
+    hint.textContent = `${weightPercent(value, 'schriftlich')} % schriftlich · ${weightPercent(value, 'muendlich')} % mündlich`;
+    presets.forEach((p, i) => p.classList.toggle('active', RATIO_PRESETS[i][0] / RATIO_PRESETS[i][1] === value.schriftlich / value.muendlich));
+  };
+  const el = h('div', { class: 'ratio' },
+    h('div', { class: 'row gap center wrap' },
+      h('span', { class: 'ratio-label' }, 'S'), sInput, h('strong', {}, ':'), mInput, h('span', { class: 'ratio-label' }, 'M'),
+      h('div', { class: 'row gap wrap' }, presets)),
+    hint);
+  el.setValue = (w) => { value = { schriftlich: Number(w.schriftlich), muendlich: Number(w.muendlich) }; sync(true); };
+  el.setDisabled = (d) => { [sInput, mInput, ...presets].forEach((x) => { x.disabled = d; }); el.classList.toggle('disabled', d); };
+  sync(true);
+  el.setDisabled(disabled);
+  return el;
+}
+
 export function openSubjectEditor(subject = null) {
   const state = getState();
   const draft = subject ? structuredClone(subject) : {
@@ -115,15 +155,7 @@ export function openSubjectEditor(subject = null) {
   };
   openModal(subject ? 'Fach bearbeiten' : 'Neues Fach', (close) => {
     const weightsCustom = !!draft.weights;
-    const weightInput = h('input', {
-      type: 'number', min: '0', max: '100', step: '5',
-      value: subjectWeights(draft).schriftlich,
-      disabled: !weightsCustom,
-      oninput: (e) => {
-        const v = Math.min(100, Math.max(0, Number(e.target.value) || 0));
-        draft.weights = { schriftlich: v, muendlich: 100 - v };
-      },
-    });
+    const weightInput = ratioInput(subjectWeights(draft), (w) => { draft.weights = w; }, { disabled: !weightsCustom });
     const colors = h('div', { class: 'colors' }, SUBJECT_COLORS.map((c) => h('button', {
       type: 'button', class: `color-swatch${c === draft.color ? ' selected' : ''}`, style: { background: c }, 'aria-label': `Farbe ${c}`,
       onclick: (e) => { draft.color = c; e.currentTarget.parentElement.querySelectorAll('.color-swatch').forEach((b) => b.classList.toggle('selected', b === e.currentTarget)); },
@@ -149,12 +181,12 @@ export function openSubjectEditor(subject = null) {
       h('div', { class: 'field' },
         h('label', { class: 'switch' },
           h('input', { type: 'checkbox', checked: weightsCustom, onchange: (e) => {
-            weightInput.disabled = !e.target.checked;
+            weightInput.setDisabled(!e.target.checked);
             draft.weights = e.target.checked ? { ...subjectWeights(draft) } : null;
-            if (!e.target.checked) weightInput.value = subjectWeights(draft).schriftlich;
+            if (!e.target.checked) weightInput.setValue(subjectWeights(draft));
           } }),
-          h('span', {}, 'Eigene Gewichtung für dieses Fach')),
-        h('div', { class: 'row gap center' }, weightInput, h('span', { class: 'muted' }, '% schriftlich, Rest Sonstige Mitarbeit'))),
+          h('span', {}, 'Eigene Gewichtung für dieses Fach', h('small', { class: 'hint block' }, `Standard für ${kindOf(draft)}: ${formatRatio(getState().settings.weights[kindOf(draft)])} (schriftlich : mündlich)`))),
+        weightInput),
       field('Weitere Namen im Klausurplan', h('input', {
         type: 'text', value: (draft.aliases ?? []).join(', '), placeholder: 'z. B. Mathe, MA-L1',
         oninput: (e) => { draft.aliases = e.target.value.split(',').map((x) => x.trim()).filter(Boolean); },

@@ -77,3 +77,36 @@ test('Termine: M2 und m2 werden nicht verwechselt', () => {
   assert.deepEqual(list, ['mLK@2026-10-21', 'inf@2026-11-03', 'dGK@2026-11-23[1.–3. Std.]', 'inf@2026-11-30{Exkursion}']);
   assert.equal(res.find((r) => r.candidate.title).sure, false, 'Exkursion nicht vorausgewählt');
 });
+
+test('Kursnummer automatisch aus Untis-Daten (alle Felder)', () => {
+  const cal = extractCalendar(pages);
+  const r = (subject) => resolvePlanCode(subject, cal);
+  // Schülergruppe ohne Trenner, Klassen-/Kursname, Stundentext
+  assert.equal(r({ short: 'M', kind: 'LK', group: 'J1M4' }).code, 'M4');
+  assert.equal(r({ short: 'M', kind: 'LK', untisLabels: ['J1', 'M', 'Mathematik', 'Kurs M3'] }).code, 'M3');
+  assert.equal(r({ short: 'MA', kind: 'LK', untisLabels: ['MA2'] }).code, 'M2', 'Untis-Kürzel MA → Plan M');
+  // Basisfach: Untis "m2" bzw. Kurs 2 in kleiner Schreibweise
+  assert.equal(r({ short: 'M', kind: 'GK', untisLabels: ['J1_m2'] }).code, 'm2');
+  assert.equal(r({ short: 'D', kind: 'GK', untisLabels: ['D2'] }).code, 'd2', 'GK → kleines Kürzel, auch wenn Untis groß schreibt');
+  assert.equal(r({ short: 'M', kind: 'LK', untisLabels: ['J1M4'] }).source, 'untis');
+  // NRW-Kursname D-G2 ist kein Geschichtskurs
+  assert.equal(r({ short: 'G', kind: 'GK', untisLabels: ['D-G2'] }).code, null);
+});
+
+test('Klausur-Tage aus Untis grenzen das Kürzel ein', () => {
+  const cal = extractCalendar(pages);
+  // M2 schreibt am 21.10. – Untis hat an dem Tag "Klausur" beim Mathekurs vermerkt
+  const res = resolvePlanCode({ short: 'M', kind: 'LK', untisExamDates: ['2026-10-21'] }, cal);
+  assert.equal(res.code, 'M2');
+  assert.equal(res.source, 'termine');
+  // 23.10.: M1 und M3 schreiben gleichzeitig → nur eingegrenzt
+  const two = resolvePlanCode({ short: 'M', kind: 'LK', untisExamDates: ['2026-10-23'] }, cal);
+  assert.equal(two.code, null);
+  assert.deepEqual(two.options, ['M1', 'M3']);
+});
+
+test('Exakte Fach-Buchstaben vor Abkürzungen', () => {
+  const cal = extractCalendar(pages);
+  // Plan hat "Gg" (Geographie) und "G" (Geschichte): Geographie darf nicht auf G fallen
+  assert.deepEqual(resolvePlanCode({ short: 'Gg', kind: 'LK' }, cal).options, ['Gg']);
+});

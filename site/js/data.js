@@ -76,6 +76,8 @@ export function syncSubjectsWithTimetable() {
       subject.hours = c.hours;
       subject.kindAuto = c.kind;
       subject.teachers = c.teachers;
+      subject.untisLabels = c.labels;
+      if (c.examDates.length) subject.untisExamDates = [...new Set([...(subject.untisExamDates ?? []), ...c.examDates])].sort().slice(-30);
       if (!subject.short) subject.short = c.short;
     }
   }, { silent: true });

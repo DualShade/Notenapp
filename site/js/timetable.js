@@ -2,6 +2,7 @@
 
 export const DEFAULT_LK_THRESHOLD = 4; // ab so vielen Wochenstunden gilt ein Kurs als LK
 const SCHOOL_HOUR_MINUTES = 45;
+const EXAM_RE = /klausur|klassenarbeit|kursarbeit|prüfung|\bKA\b/i;
 
 function untisTime(t) {
   const s = String(t).padStart(4, '0');
@@ -154,12 +155,26 @@ export function detectCourses(lessons, { threshold = DEFAULT_LK_THRESHOLD } = {}
         teachers: new Set(),
         rooms: new Set(),
         weeks: new Map(),
+        labels: new Set(),
+        examDates: new Set(),
       });
     }
     const c = courses.get(key);
     l.teachers.forEach((t) => c.teachers.add(t));
     l.rooms.forEach((r) => c.rooms.add(r));
     c.weeks.set(week, (c.weeks.get(week) ?? 0) + units);
+  }
+
+  // Alle Untis-Bezeichnungen eines Kurses (Schülergruppe, Klassen/Kurse, Fach,
+  // Stundentext) und Tage, an denen Untis eine Klausur vermerkt – auch aus
+  // Vertretungs-/Sonderstunden. Damit lassen sich Kürzel im Klausurplan zuordnen.
+  for (const l of lessons) {
+    const c = courses.get(l.courseKey ?? courseKeyOf(l));
+    if (!c) continue;
+    for (const label of [l.group, l.subject?.short, l.subject?.long, l.info, ...(l.classes ?? [])]) {
+      if (label && c.labels.size < 15) c.labels.add(String(label).slice(0, 60));
+    }
+    if (EXAM_RE.test([l.info, l.substText].filter(Boolean).join(' '))) c.examDates.add(l.date);
   }
 
   // Volle Wochen: mindestens 70 % der Stunden der stärksten Woche.
@@ -181,6 +196,8 @@ export function detectCourses(lessons, { threshold = DEFAULT_LK_THRESHOLD } = {}
       group: c.group,
       teachers: [...c.teachers],
       rooms: [...c.rooms],
+      labels: [...c.labels],
+      examDates: [...c.examDates].sort().slice(-20),
       hours,
       kind: hours >= threshold ? 'LK' : 'GK',
     });

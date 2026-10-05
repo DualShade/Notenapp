@@ -36,13 +36,28 @@ function courseMapping(calendar, rerender, ui) {
       return h('div', { class: 'list-item mapping-row' },
         colorDot(s),
         h('div', { class: 'grow' }, h('div', { class: 'title' }, s.name, ' ', h('span', { class: `badge ${s.kind === 'LK' ? 'lk' : 'gk'}` }, s.kind)),
-          h('div', { class: 'sub' }, current === '-' ? 'nicht im Plan' : current ? (res.manual ? 'von dir gewählt' : 'automatisch erkannt') : res.options.length ? `bitte wählen (${res.options.length} passende Kürzel)` : 'kein passendes Kürzel gefunden')),
+          h('div', { class: 'sub' }, mappingHint(s, res, current))),
         h('select', { class: `small-select${current ? '' : ' needs-choice'}`, 'aria-label': `Kürzel für ${s.name}`, onchange: (e) => setCode(s.id, e.target.value || null) },
           h('option', { value: '', selected: current === '' }, '– wählen –'),
           res.options.length ? h('optgroup', { label: 'Passend' }, res.options.map((c) => h('option', { value: c, selected: c === current }, c))) : null,
           h('optgroup', { label: 'Alle Kürzel' }, others.map((c) => h('option', { value: c, selected: c === current }, c))),
           h('option', { value: '-', selected: current === '-' }, 'nicht im Plan')));
     })));
+}
+
+function mappingHint(subject, res, current) {
+  if (current === '-') return 'nicht im Plan';
+  if (current) {
+    return {
+      manual: 'von dir gewählt',
+      untis: 'aus Untis erkannt',
+      termine: 'über Klausurtermine in Untis erkannt',
+      eindeutig: 'eindeutig im Plan',
+    }[res.source] ?? 'automatisch erkannt';
+  }
+  const untis = [...new Set([subject.group, ...(subject.untisLabels ?? [])].filter(Boolean))].slice(0, 4).join(', ');
+  const choose = res.options.length ? `bitte wählen: ${res.options.join(', ')}` : 'kein passendes Kürzel gefunden';
+  return untis ? `${choose} · Untis: ${untis}` : choose;
 }
 
 /** Vorschau-Liste: Benutzer wählt aus, welche Termine übernommen werden. */

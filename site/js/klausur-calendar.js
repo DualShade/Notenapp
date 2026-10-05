@@ -144,46 +144,86 @@ const sameCode = (a, b, caseSensitive) => (caseSensitive ? normCode(a) === normC
  * Nur wenn die Buchstaben zum Fach passen ("D-G2" ist kein Geschichtskurs).
  */
 export function untisCode(group, short = null) {
-  const last = String(group ?? '').split(/[\s_\-/.]+/).filter(Boolean).at(-1) ?? '';
-  const m = last.match(new RegExp(`^([${LETTER}]+)(\\d+)\\*?$`));
-  if (!m) return null;
-  if (short && m[1].toLowerCase() !== lettersOf(short).toLowerCase()) return null;
-  return `${m[1]}${m[2]}`;
+  const tokens = untisTokens([group]);
+  const own = short ? tokens.filter((t) => lettersMatch(t.letters, short)) : tokens;
+  const t = own.at(-1);
+  return t ? `${t.letters}${t.number}` : null;
+}
+
+/** Alle "Buchstaben+Zahl"-Teile aus Untis-Bezeichnungen: "J1M4" → J1, M4. */
+export function untisTokens(labels) {
+  const out = [];
+  const re = new RegExp(`([${LETTER}]+)(\\d+)\\*?`, 'g');
+  for (const label of labels) {
+    if (!label) continue;
+    let m;
+    while ((m = re.exec(String(label)))) out.push({ letters: m[1], number: String(Number(m[2])) });
+  }
+  return out;
+}
+
+/** Gleiche Buchstaben ("M" = "m"), mit prefix auch Abkürzungen ("M" ↔ "MA", "B" ↔ "BIO"). */
+function lettersMatch(a, b, { prefix = true } = {}) {
+  const x = lettersOf(a).toLowerCase();
+  const y = lettersOf(b).toLowerCase();
+  if (!x || !y) return false;
+  return x === y || (prefix && (x.startsWith(y) || y.startsWith(x)));
+}
+
+const isUpper = (code) => { const l = lettersOf(code)[0]; return !!l && l === l.toUpperCase(); };
+
+/** Plan-Termine (Datumsliste) eines Kürzels. */
+function datesOf(info, code) {
+  return info.days.filter((d) => d.items.some((i) => sameCode(i.code, code, info.caseSensitive))).map((d) => d.date);
 }
 
 /**
  * Welches Plan-Kürzel gehört zu einem Fach?
- * Liefert {code, sure, options}: `options` = plausible Kürzel (gleiche Buchstaben),
- * `code` nur, wenn eindeutig (gespeichert, aus Untis-Kurs oder einzig passendes).
+ * Reihenfolge: gespeicherte Wahl → Untis-Bezeichnungen (Kursname, Klassen,
+ * Fach, Stundentext) → Klausur-Tage aus Untis → einziges passendes Kürzel.
+ * Liefert {code, sure, options, source}.
  */
 export function resolvePlanCode(subject, info) {
   const { codes, caseSensitive } = info;
   if (subject.planCode) {
     const hit = codes.find((c) => sameCode(c, subject.planCode, true));
-    if (hit || subject.planCode === '-') return { code: hit ?? null, sure: true, options: [], manual: true };
+    if (hit || subject.planCode === '-') return { code: hit ?? null, sure: true, options: [], manual: true, source: 'manual' };
   }
-  const fromUntis = untisCode(subject.group ?? subject.untisKey, subject.short);
-  if (fromUntis) {
-    const hit = codes.find((c) => sameCode(c, fromUntis, caseSensitive));
-    if (hit) return { code: hit, sure: true, options: [hit] };
+  const kindFits = (c) => !caseSensitive || !subject.kind || (subject.kind === 'LK') === isUpper(c);
+  const names = [subject.short, ...(subject.aliases ?? [])].filter(Boolean);
+  // Exakte Buchstaben haben Vorrang: Bei "Gk" im Plan passt Gemeinschaftskunde nicht auf "G"
+  const exact = codes.some((c) => names.some((n) => lettersMatch(c, n, { prefix: false })));
+  const subjectFits = (letters) => names.some((n) => lettersMatch(letters, n, { prefix: !exact }));
+
+  // 1. Kursnummer aus Untis: Token mit passenden Buchstaben + Nummer im Plan
+  const labels = [subject.group, subject.untisKey, ...(subject.untisLabels ?? [])];
+  const tokens = untisTokens(labels).filter((t) => subjectFits(t.letters));
+  const fromUntis = [...new Set(tokens.flatMap((t) => {
+    const same = codes.filter((c) => numberOf(c) === t.number && lettersMatch(c, t.letters));
+    // M2 vs. m2: LK/GK entscheidet; ist die Kursart unbekannt, die Schreibweise aus Untis
+    if (!caseSensitive || same.length < 2) return same.filter(kindFits);
+    if (subject.kind) return same.filter(kindFits);
+    return same.filter((c) => sameCode(c, `${t.letters}${t.number}`, true));
+  }))];
+  if (fromUntis.length === 1) return { code: fromUntis[0], sure: true, options: fromUntis, source: 'untis' };
+
+  // Plausible Kürzel: gleiche Fach-Buchstaben, passende Schreibweise (LK groß / GK klein)
+  let options = codes.filter((c) => subjectFits(c));
+  const byKind = options.filter(kindFits);
+  if (byKind.length) options = byKind;
+  if (fromUntis.length > 1) options = fromUntis;
+
+  // 2. Klausur-Tage, die Untis für den Kurs vermerkt hat, grenzen ein
+  const examDates = new Set(subject.untisExamDates ?? []);
+  if (examDates.size && options.length > 1) {
+    const hits = options.filter((c) => datesOf(info, c).some((d) => examDates.has(d)));
+    if (hits.length === 1) return { code: hits[0], sure: true, options: hits, source: 'termine' };
+    if (hits.length > 1) options = hits;
   }
-  const wanted = new Set([subject.short, ...(subject.aliases ?? []), lettersOf(fromUntis)].filter(Boolean).map((x) => lettersOf(x).toLowerCase()).filter(Boolean));
-  let options = codes.filter((c) => wanted.has(lettersOf(c).toLowerCase()));
-  // Nur Abkürzungen: "B" passt zu "BIO", "Inf" zu "INF"
-  if (!options.length) {
-    options = codes.filter((c) => [...wanted].some((w) => w.length > 1 && (w.startsWith(lettersOf(c).toLowerCase()) || lettersOf(c).toLowerCase().startsWith(w))));
-  }
-  // Groß = Leistungsfach (LK), klein = Basisfach (GK), wenn der Plan das unterscheidet
-  if (caseSensitive && subject.kind) {
-    const byCase = options.filter((c) => {
-      const upper = lettersOf(c)[0] === lettersOf(c)[0].toUpperCase();
-      return subject.kind === 'LK' ? upper : !upper;
-    });
-    if (byCase.length) options = byCase;
-  }
-  // Eindeutig nur, wenn es genau ein Kürzel ohne Kursnummer gibt (z. B. "BK", "Gk")
+
+  // 3. Eindeutig nur, wenn es genau ein Kürzel ohne Kursnummer gibt (z. B. "BK", "Gk")
   const single = options.length === 1 ? options[0] : null;
-  return { code: single, sure: !!single && !numberOf(single), options };
+  return { code: single && !numberOf(single) ? single : null, sure: !!single && !numberOf(single), options, source: single ? 'eindeutig' : null };
 }
 
 /** Termine für die Fächer: [{candidate, subjectId, score, sure}] wie matchCandidates. */

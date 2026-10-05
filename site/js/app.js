@@ -1,6 +1,6 @@
 import { h, icon, toast } from './ui.js';
 import { getState, subscribe, update } from './store.js';
-import { loadServerData, syncSubjectsWithTimetable, autoImportFromServer, untisAccount, hasProxy, refreshUntis } from './data.js';
+import { loadServerData, syncSubjectsWithTimetable, autoImportFromServer, untisAccount, hasProxy, refreshUntis, cleanupDuplicates } from './data.js';
 import { startSync, onSyncStatus, syncStatus, getAccount } from './sync.js';
 import { overviewView } from './views/overview.js';
 import { subjectsView, subjectDetailView } from './views/subjects.js';
@@ -121,6 +121,7 @@ async function refresh({ quiet = true } = {}) {
   lastLoad = Date.now();
   const [, untisCreated] = await Promise.all([loadServerData(), refreshUntisIfStale()]);
   const created = syncSubjectsWithTimetable() + untisCreated;
+  cleanupDuplicates();
   const imported = autoImportFromServer();
   render();
   if (created) toast(`${created} Fächer aus Untis übernommen.`, 'success');

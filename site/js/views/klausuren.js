@@ -82,7 +82,7 @@ function previewList(source, close) {
         h('div', { class: 'grow' },
           h('div', { class: 'title' }, formatDate(p.candidate.date), ' · ', subject?.name,
             p.candidate.title ? h('span', { class: 'tag' }, p.candidate.title) : null,
-            p.sure ? null : h('span', { class: 'tag warn' }, 'unsicher')),
+            p.sure || p.candidate.title ? null : h('span', { class: 'tag warn' }, 'unsicher')),
           h('div', { class: 'sub mono' }, [p.candidate.code, p.candidate.periods].filter(Boolean).join(' · ') || p.candidate.text)));
     };
     const unmatchedRow = (p, i) => h('div', { class: 'check-row' },

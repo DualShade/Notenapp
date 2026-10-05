@@ -3,6 +3,7 @@
 export const DEFAULT_LK_THRESHOLD = 4; // ab so vielen Wochenstunden gilt ein Kurs als LK
 const SCHOOL_HOUR_MINUTES = 45;
 const EXAM_RE = /klausur|klassenarbeit|kursarbeit|prüfung|\bKA\b/i;
+const EXAM_SUBJECT_RE = /^(KA|KL|Klausur|Klassenarbeit|Prüfung)$/i;
 
 function untisTime(t) {
   const s = String(t).padStart(4, '0');
@@ -142,6 +143,7 @@ export function detectCourses(lessons, { threshold = DEFAULT_LK_THRESHOLD } = {}
 
   for (const l of source) {
     if (!l.subject && !l.group) continue;
+    if (EXAM_SUBJECT_RE.test(l.subject?.short ?? '')) continue; // "KA" = Klausur, kein Kurs
     const key = l.courseKey ?? courseKeyOf(l);
     const week = mondayKey(l.date);
     const units = (minutesOf(l.end) - minutesOf(l.start)) / SCHOOL_HOUR_MINUTES;
@@ -182,6 +184,9 @@ export function detectCourses(lessons, { threshold = DEFAULT_LK_THRESHOLD } = {}
   let fullWeeks = [...weekTotals.entries()].filter(([, t]) => t >= maxWeek * 0.7).map(([w]) => w);
   if (!fullWeeks.length) fullWeeks = [...weekTotals.keys()];
 
+  // Schulwochen (ohne Ferien): mindestens 30 % der stärksten Woche
+  const schoolWeeks = [...weekTotals.entries()].filter(([, t]) => t >= maxWeek * 0.3).map(([w]) => w);
+
   const result = [];
   for (const c of courses.values()) {
     const perWeek = fullWeeks.map((w) => c.weeks.get(w) ?? 0);
@@ -198,6 +203,8 @@ export function detectCourses(lessons, { threshold = DEFAULT_LK_THRESHOLD } = {}
       rooms: [...c.rooms],
       labels: [...c.labels],
       examDates: [...c.examDates].sort().slice(-20),
+      // Nur in einzelnen Wochen (Methodentag, Exkursion …) → kein richtiger Kurs
+      occasional: schoolWeeks.length >= 2 && schoolWeeks.filter((w) => c.weeks.has(w)).length / schoolWeeks.length < 0.5,
       hours,
       kind: hours >= threshold ? 'LK' : 'GK',
     });

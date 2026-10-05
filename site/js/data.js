@@ -7,6 +7,7 @@ import { extractPdfRows } from './pdf-text.js';
 import { extractCandidates, matchCandidates, klausurKey } from './klausur-parser.js';
 import { findPdfLink } from './link-finder.js';
 import { extractCalendar, matchCalendar } from './klausur-calendar.js';
+import { dedupeSubjects, hasDuplicateSubjects, untisSubjectId, cleanSubjectName } from './dedupe.js';
 import { fetchUntisTimetable, searchSchools, UntisError } from './untis-client.js';
 import { APP_CONFIG } from './config.js';
 
@@ -53,25 +54,37 @@ export function currentCourses() {
   return detectCourses(tt.lessons, { threshold: getState().settings.lkThreshold });
 }
 
+const hasEntries = (s, id) => ['grades', 'klausuren', 'homework', 'absences', 'finals'].some((c) => (s[c] ?? []).some((x) => x.subjectId === id));
+
 /** Legt für alle Untis-Kurse Fächer an bzw. aktualisiert Stundenzahl & LK/GK. */
 export function syncSubjectsWithTimetable() {
   const courses = currentCourses();
-  if (!courses.length) return 0;
   let created = 0;
   update((s) => {
+    // Erst Duplikate zusammenführen, damit das verbleibende Fach aktualisiert wird
+    dedupeSubjects(s);
     for (const c of courses) {
       let subject = s.subjects.find((x) => x.untisKey === c.key);
       if (!subject) {
-        if (!s.settings.autoSubjects) continue;
+        // Methodentag, Exkursion o. ä. (nur in einzelnen Wochen) → kein Fach anlegen
+        if (!s.settings.autoSubjects || c.occasional) continue;
         // Gleichnamiges manuell angelegtes Fach übernehmen statt doppelt anzulegen
-        subject = s.subjects.find((x) => !x.untisKey && (x.short === c.short || x.name === c.long));
+        subject = s.subjects.find((x) => !x.untisKey && (x.short === c.short || x.name === c.long || x.name === cleanSubjectName(c.long)));
         if (!subject) {
-          subject = { id: uid(), name: c.long, short: c.short, color: nextColor(s.subjects), aliases: [], createdAt: Date.now() };
-          s.subjects.push(subject);
-          created++;
+          // Stabile ID: legen zwei Geräte dasselbe Fach an, ist es dasselbe Fach
+          const id = untisSubjectId(c.key);
+          subject = s.subjects.find((x) => x.id === id);
+          if (!subject) {
+            subject = { id, name: cleanSubjectName(c.long), short: c.short, color: nextColor(s.subjects), aliases: [], createdAt: Date.now() };
+            s.subjects.push(subject);
+            created++;
+          }
         }
         subject.untisKey = c.key;
       }
+      // Automatisch vergebenen Namen aufräumen ("Englisch 3-stdg." → "Englisch")
+      if (subject.name === c.long || subject.name === subject.untisName) subject.name = cleanSubjectName(c.long);
+      subject.untisName = c.long;
       subject.group = c.group ?? subject.group ?? null;
       subject.hours = c.hours;
       subject.kindAuto = c.kind;
@@ -79,9 +92,20 @@ export function syncSubjectsWithTimetable() {
       subject.untisLabels = c.labels;
       if (c.examDates.length) subject.untisExamDates = [...new Set([...(subject.untisExamDates ?? []), ...c.examDates])].sort().slice(-30);
       if (!subject.short) subject.short = c.short;
+      // Früher versehentlich angelegte Einmal-Termine ohne Einträge ausblenden
+      if (c.occasional && !hasEntries(s, subject.id)) subject.archived = true;
     }
+    dedupeSubjects(s);
   }, { silent: true });
   return created;
+}
+
+/** Doppelte Fächer (z. B. von zwei Geräten angelegt) zusammenführen. */
+export function cleanupDuplicates() {
+  if (!hasDuplicateSubjects(getState())) return 0;
+  let removed = 0;
+  update((s) => { removed = dedupeSubjects(s); });
+  return removed;
 }
 
 export function subjectForLesson(lesson) {

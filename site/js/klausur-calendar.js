@@ -199,7 +199,10 @@ export function resolvePlanCode(subject, info) {
   const labels = [subject.group, subject.untisKey, ...(subject.untisLabels ?? [])];
   const tokens = untisTokens(labels).filter((t) => subjectFits(t.letters));
   const fromUntis = [...new Set(tokens.flatMap((t) => {
-    const same = codes.filter((c) => numberOf(c) === t.number && lettersMatch(c, t.letters));
+    // Exakte Buchstaben zuerst: "e2" ist Englisch, nicht Ethik "et2"; "g1" nicht "gg1"
+    const withNumber = codes.filter((c) => numberOf(c) === t.number);
+    const exactLetters = withNumber.filter((c) => lettersMatch(c, t.letters, { prefix: false }));
+    const same = exactLetters.length ? exactLetters : withNumber.filter((c) => lettersMatch(c, t.letters));
     // M2 vs. m2: LK/GK entscheidet; ist die Kursart unbekannt, die Schreibweise aus Untis
     if (!caseSensitive || same.length < 2) return same.filter(kindFits);
     if (subject.kind) return same.filter(kindFits);

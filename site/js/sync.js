@@ -5,6 +5,7 @@
 import { APP_CONFIG } from './config.js';
 import { getState, applyRemote, onLocalChange } from './store.js';
 import { toPayload, mergePayloads } from './sync-model.js';
+import { cleanupDuplicates } from './data.js';
 
 const KEY = 'notenapp:account';
 const listeners = new Set();
@@ -113,6 +114,8 @@ async function runSync() {
   account.lastSyncAt = new Date().toISOString();
   saveAccount();
   setStatus({ state: 'idle', error: null });
+  // Doppelte Fächer aus früheren Versionen zusammenführen (löst einen weiteren Sync aus)
+  cleanupDuplicates();
 }
 
 /** Jetzt synchronisieren (mehrfache Aufrufe werden zusammengefasst). */

@@ -110,3 +110,28 @@ test('Exakte Fach-Buchstaben vor Abkürzungen', () => {
   // Plan hat "Gg" (Geographie) und "G" (Geschichte): Geographie darf nicht auf G fallen
   assert.deepEqual(resolvePlanCode({ short: 'Gg', kind: 'LK' }, cal).options, ['Gg']);
 });
+
+test('Kürzel direkt aus dem Untis-Fach (Schule führt jeden Kurs als eigenes Fach)', () => {
+  const cal = extractCalendar(pages);
+  const r = (short, kind, long) => resolvePlanCode({ short, kind, untisLabels: [short, long, 'Js1'] }, cal);
+  assert.equal(r('M2', 'LK', 'Mathematik 5-stdg.').code, 'M2');
+  assert.equal(r('m2', 'GK', 'Mathematik 3-stdg.').code, 'm2');
+  assert.equal(r('d2', 'GK', 'Deutsch 3-stdg.').code, 'd2');
+  assert.equal(r('D2', 'LK', 'Deutsch 5-stdg.').code, 'D2');
+  // Plan führt Informatik ohne Nummer ("inf"), Untis als "inf1"
+  assert.equal(r('inf1', 'GK', 'Informatik 3-stdg.').code, 'inf');
+  assert.equal(r('Inf1', 'LK', 'Informatik 5-stdg.').code, 'Inf');
+  assert.equal(r('ast2', 'GK', 'Astronomie').code, 'ast2');
+  assert.equal(r('g6', 'GK', 'Geschichte 2-stdg.').code, 'g6');
+});
+
+test('Exakte Kürzel-Buchstaben: e2 ≠ et2, g1 ≠ gg1/gk1, gk5 ≠ g5, bk2 ≠ b2', () => {
+  const codes = ['e1', 'e2', 'E1', 'E2', 'et1', 'et2', 'g1', 'g5', 'gg1', 'gk1', 'gk5', 'Gk', 'G', 'Gg', 'b2', 'B2', 'bk2', 'BK'];
+  const info = { codes, caseSensitive: true, days: [] };
+  const r = (short, kind) => resolvePlanCode({ short, kind, untisLabels: [short, 'Js1'] }, info).code;
+  assert.equal(r('e2', 'GK'), 'e2');
+  assert.equal(r('g1', 'GK'), 'g1');
+  assert.equal(r('gk5', 'GK'), 'gk5');
+  assert.equal(r('bk2', 'GK'), 'bk2');
+  assert.equal(r('et2', 'GK'), 'et2');
+});

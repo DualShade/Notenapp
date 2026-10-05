@@ -6,6 +6,7 @@ import { normalizeTimetable, detectCourses, todayIso } from './timetable.js';
 import { extractPdfRows } from './pdf-text.js';
 import { extractCandidates, matchCandidates, klausurKey } from './klausur-parser.js';
 import { findPdfLink } from './link-finder.js';
+import { extractCalendar, matchCalendar } from './klausur-calendar.js';
 import { fetchUntisTimetable, searchSchools, UntisError } from './untis-client.js';
 import { APP_CONFIG } from './config.js';
 
@@ -243,14 +244,23 @@ export async function liveKlausurPages() {
 }
 
 /** Vorschläge (Datum + Fach) aus PDF-Seiten, ohne bereits importierte/ignorierte. */
+/** Infos zu einem Plan im Kalender-Layout (Kürzel, Groß/Klein) oder null. */
+export function planCalendar(pages) {
+  return extractCalendar(pages);
+}
+
 export function klausurProposals(pages, { stufe, includePast = false } = {}) {
   const state = getState();
   const subjects = state.subjects.filter((s) => !s.archived).map((s) => ({ ...s, kind: kindOf(s) }));
-  const candidates = extractCandidates(pages, { stufe: stufe ?? state.settings.klausurSource.stufe });
   const today = todayIso();
   const existing = new Set(state.klausuren.filter((k) => k.subjectId).map((k) => klausurKey(k.date, k.subjectId)));
   const ignored = new Set(state.ignoredKlausurKeys);
-  return matchCandidates(candidates, subjects)
+  // Kalender-Layout (Monate als Spalten) oder klassische Tabelle mit Datumsspalte
+  const calendar = extractCalendar(pages);
+  const matches = calendar
+    ? matchCalendar(calendar, subjects)
+    : matchCandidates(extractCandidates(pages, { stufe: stufe ?? state.settings.klausurSource.stufe }), subjects);
+  return matches
     .filter((r) => includePast || r.candidate.date >= today)
     .map((r) => ({ ...r, key: r.subjectId ? klausurKey(r.candidate.date, r.subjectId) : null }))
     .filter((r) => !r.key || (!existing.has(r.key) && !ignored.has(r.key)));
@@ -293,7 +303,8 @@ export function proposalToItem(r) {
   return {
     subjectId: r.subjectId,
     date: r.candidate.date,
-    info: r.candidate.periods ?? null,
+    title: r.candidate.title ?? 'Klausur',
+    info: [r.candidate.code, r.candidate.periods].filter(Boolean).join(' · ') || null,
     raw: r.candidate.text,
   };
 }

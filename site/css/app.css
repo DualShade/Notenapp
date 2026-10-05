@@ -504,3 +504,6 @@ input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible
 .rank li { min-width: 0; }
 .rank li > :first-child { overflow: hidden; text-overflow: ellipsis; }
 .nowrap { white-space: nowrap; }
+.mapping > summary { font-weight: 700; }
+.mapping-row .small-select { max-width: 120px; }
+.small-select.needs-choice { border-color: var(--warn); }

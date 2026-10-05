@@ -1,18 +1,56 @@
 import { h, icon, empty, openModal, toast, formatDate, formatDateTime, field, setChildren } from '../ui.js';
-import { getState, kindOf } from '../store.js';
+import { getState, update, kindOf } from '../store.js';
 import { todayIso } from '../timetable.js';
 import {
   server, klausurProposals, importKlausuren, ignoreProposals, proposalToItem, liveKlausurPages,
-  pdfToPages, fetchExternal,
+  pdfToPages, fetchExternal, planCalendar,
 } from '../data.js';
+import { resolvePlanCode } from '../klausur-calendar.js';
 import { activeSubjects, subjectById, klausurRow, openKlausurEditor, openGradeEditor, colorDot } from './common.js';
 import { klausurKey } from '../klausur-parser.js';
 import { downloadIcs } from '../ics.js';
+
+/**
+ * Kalender-Pläne: Pro Fach das eigene Kürzel wählen (z. B. Mathe → "M4").
+ * Vorschlag aus Untis-Kurs und Groß-/Kleinschreibung; die Wahl wird im Fach
+ * gespeichert (und synchronisiert), künftige Importe laufen automatisch.
+ */
+function courseMapping(calendar, rerender, ui) {
+  const subjects = activeSubjects().map((s) => ({ ...s, kind: kindOf(s) }));
+  const setCode = (id, code) => {
+    update((st) => { const x = st.subjects.find((y) => y.id === id); if (x) x.planCode = code; }, { silent: true });
+    rerender();
+  };
+  const open = subjects.filter((s) => !resolvePlanCode(s, calendar).code && s.planCode !== '-').length;
+  // Einmal geöffnet bleibt der Bereich offen, bis man ihn selbst schließt
+  ui.open ??= open > 0;
+  return h('details', { class: 'card mapping', open: ui.open, ontoggle: (e) => { ui.open = e.target.open; } },
+    h('summary', {}, `Deine Kurse im Plan${open ? ` · ${open} offen` : ' ✓'}`),
+    h('p', { class: 'muted small' }, calendar.caseSensitive
+      ? 'Dieser Plan unterscheidet Groß- und Kleinschreibung: groß (z. B. M2) = Leistungsfach, klein (m2) = Basisfach. Wähle einmal dein Kürzel pro Fach – das merkt sich die App.'
+      : 'Wähle einmal dein Kürzel pro Fach – das merkt sich die App für künftige Importe.'),
+    h('div', { class: 'list compact' }, subjects.map((s) => {
+      const res = resolvePlanCode(s, calendar);
+      const current = s.planCode === '-' ? '-' : res.code ?? '';
+      const others = calendar.codes.filter((c) => !res.options.includes(c));
+      return h('div', { class: 'list-item mapping-row' },
+        colorDot(s),
+        h('div', { class: 'grow' }, h('div', { class: 'title' }, s.name, ' ', h('span', { class: `badge ${s.kind === 'LK' ? 'lk' : 'gk'}` }, s.kind)),
+          h('div', { class: 'sub' }, current === '-' ? 'nicht im Plan' : current ? (res.manual ? 'von dir gewählt' : 'automatisch erkannt') : res.options.length ? `bitte wählen (${res.options.length} passende Kürzel)` : 'kein passendes Kürzel gefunden')),
+        h('select', { class: `small-select${current ? '' : ' needs-choice'}`, 'aria-label': `Kürzel für ${s.name}`, onchange: (e) => setCode(s.id, e.target.value || null) },
+          h('option', { value: '', selected: current === '' }, '– wählen –'),
+          res.options.length ? h('optgroup', { label: 'Passend' }, res.options.map((c) => h('option', { value: c, selected: c === current }, c))) : null,
+          h('optgroup', { label: 'Alle Kürzel' }, others.map((c) => h('option', { value: c, selected: c === current }, c))),
+          h('option', { value: '-', selected: current === '-' }, 'nicht im Plan')));
+    })));
+}
 
 /** Vorschau-Liste: Benutzer wählt aus, welche Termine übernommen werden. */
 function previewList(source, close) {
   const stufe = { value: source.stufe ?? getState().settings.klausurSource.stufe ?? '' };
   const wrap = h('div', { class: 'stack' });
+  const calendar = planCalendar(source.pages);
+  const mappingUi = {};
   const render = () => {
     const proposals = klausurProposals(source.pages, { stufe: stufe.value });
     const matched = proposals.filter((p) => p.subjectId);
@@ -27,8 +65,10 @@ function previewList(source, close) {
         h('input', { type: 'checkbox', checked: selected.has(p.key), onchange: (e) => { if (e.target.checked) selected.set(p.key, p); else selected.delete(p.key); } }),
         colorDot(subject),
         h('div', { class: 'grow' },
-          h('div', { class: 'title' }, formatDate(p.candidate.date), ' · ', subject?.name, p.sure ? null : h('span', { class: 'tag warn' }, 'unsicher')),
-          h('div', { class: 'sub mono' }, p.candidate.text)));
+          h('div', { class: 'title' }, formatDate(p.candidate.date), ' · ', subject?.name,
+            p.candidate.title ? h('span', { class: 'tag' }, p.candidate.title) : null,
+            p.sure ? null : h('span', { class: 'tag warn' }, 'unsicher')),
+          h('div', { class: 'sub mono' }, [p.candidate.code, p.candidate.periods].filter(Boolean).join(' · ') || p.candidate.text)));
     };
     const unmatchedRow = (p, i) => h('div', { class: 'check-row' },
       h('div', { class: 'grow' },
@@ -40,11 +80,13 @@ function previewList(source, close) {
 
     setChildren(wrap,
       h('p', { class: 'muted small' }, source.label),
-      field('Stufe/Filter (optional)', h('input', { type: 'text', value: stufe.value, placeholder: 'z. B. Q1', onchange: (e) => { stufe.value = e.target.value.trim(); render(); } }),
+      calendar ? courseMapping(calendar, render, mappingUi) : field('Stufe/Filter (optional)', h('input', { type: 'text', value: stufe.value, placeholder: 'z. B. Q1', onchange: (e) => { stufe.value = e.target.value.trim(); render(); } }),
         'Nur Seiten berücksichtigen, auf denen dieser Text vorkommt.'),
       matched.length
-        ? h('div', { class: 'list' }, matched.map(row))
-        : h('p', { class: 'muted' }, 'Keine neuen Termine für deine Fächer gefunden. Unter „Weitere Termine“ kannst du Zeilen selbst zuordnen, oder in einem Fach weitere Namen hinterlegen.'),
+        ? h('div', { class: 'stack' }, h('h3', { class: 'card-title' }, `Gefundene Termine (${matched.length})`), h('div', { class: 'list' }, matched.map(row)))
+        : h('p', { class: 'muted' }, calendar
+          ? 'Noch keine Termine – wähle oben für deine Fächer das passende Kürzel aus dem Plan.'
+          : 'Keine neuen Termine für deine Fächer gefunden. Unter „Weitere Termine“ kannst du Zeilen selbst zuordnen, oder in einem Fach weitere Namen hinterlegen.'),
       unmatched.length ? h('details', { class: 'more' },
         h('summary', {}, `Weitere Termine ohne Zuordnung (${unmatched.length})`),
         h('div', { class: 'list' }, unmatched.map(unmatchedRow))) : null,

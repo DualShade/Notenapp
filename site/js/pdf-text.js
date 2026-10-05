@@ -39,7 +39,13 @@ export function itemsToRows(items) {
     }
     const kept = cells.map((c) => ({ ...c, text: c.text.replace(/\s+/g, ' ').trim() })).filter((c) => c.text);
     const texts = kept.map((c) => c.text);
-    return { y: Math.round(line.y), x: Math.round(kept[0]?.x ?? 0), cells: texts, text: texts.join(' | ') };
+    return {
+      y: Math.round(line.y),
+      x: Math.round(kept[0]?.x ?? 0),
+      xs: kept.map((c) => Math.round(c.x)), // linke Kante jeder Zelle (für Kalender-Layouts)
+      cells: texts,
+      text: texts.join(' | '),
+    };
   });
 }
 

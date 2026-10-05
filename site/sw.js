@@ -8,7 +8,7 @@ const SHELL = [
   'js/klausur-parser.js', 'js/pdf-text.js', 'js/link-finder.js', 'js/untis-client.js',
   'js/views/common.js', 'js/views/overview.js', 'js/views/subjects.js', 'js/views/timetable-view.js',
   'js/views/klausuren.js', 'js/views/schluessel.js', 'js/views/settings.js', 'js/views/untis-connect.js',
-  'js/sync.js', 'js/sync-model.js', 'js/abi-calc.js', 'js/ics.js',
+  'js/sync.js', 'js/sync-model.js', 'js/abi-calc.js', 'js/ics.js', 'js/klausur-calendar.js',
   'js/views/account.js', 'js/views/homework.js', 'js/views/absences.js', 'js/views/tasks.js', 'js/views/more.js',
   'js/views/stats.js', 'js/views/abi.js', 'js/views/print.js',
 ];

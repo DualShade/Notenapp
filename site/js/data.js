@@ -5,7 +5,7 @@ import { getState, update, uid, kindOf, nextColor } from './store.js';
 import { normalizeTimetable, detectCourses, todayIso } from './timetable.js';
 import { extractPdfRows } from './pdf-text.js';
 import { extractCandidates, matchCandidates, klausurKey } from './klausur-parser.js';
-import { findPdfLink } from './link-finder.js';
+import { findPdfLink, fetchPdf } from './link-finder.js';
 import { extractCalendar, matchCalendar } from './klausur-calendar.js';
 import { dedupeSubjects, hasDuplicateSubjects, untisSubjectId, cleanSubjectName } from './dedupe.js';
 import { fetchUntisTimetable, searchSchools, UntisError } from './untis-client.js';
@@ -257,7 +257,8 @@ export async function pdfToPages(buffer) {
 /** Aktuellen Klausurplan live von der Homepage holen (direkt oder per Proxy). */
 export async function liveKlausurPages() {
   const src = getState().settings.klausurSource;
-  let pdfUrl = src.pdfUrl?.trim();
+  // Eigene Quelle aus den Einstellungen, sonst die der Website (GitHub Action)
+  let pdfUrl = src.pdfUrl?.trim() || (!src.pageUrl ? server.klausuren?.pdfUrl : null);
   if (!pdfUrl) {
     if (!src.pageUrl) throw new Error('Keine Homepage oder PDF-URL in den Einstellungen hinterlegt.');
     const html = await fetchExternal(src.pageUrl, 'text');
@@ -265,8 +266,12 @@ export async function liveKlausurPages() {
     if (!link) throw new Error(`Kein PDF-Link mit „${src.linkPattern}“ auf der Seite gefunden.`);
     pdfUrl = link.url;
   }
-  const buffer = await fetchExternal(pdfUrl, 'buffer');
-  return { pages: await pdfToPages(buffer), pdfUrl, fetchedAt: new Date().toISOString() };
+  // Direkte PDF oder Download-Seite (z. B. "…?wpdmdl=228")
+  const { bytes, url } = await fetchPdf(pdfUrl, {
+    pattern: src.linkPattern,
+    fetchBytes: async (u) => ({ bytes: new Uint8Array(await fetchExternal(u, 'buffer')), url: u }),
+  });
+  return { pages: await pdfToPages(bytes), pdfUrl: url, fetchedAt: new Date().toISOString() };
 }
 
 /** Vorschläge (Datum + Fach) aus PDF-Seiten, ohne bereits importierte/ignorierte. */

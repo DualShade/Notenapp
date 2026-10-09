@@ -7,6 +7,7 @@ const TILES = [
   ['statistik', 'chart', 'Statistik', 'Verlauf, Verteilung, Stärken'],
   ['abi', 'cap', 'Abi-Rechner', 'Block I + II, Abi-Schnitt'],
   ['schluessel', 'key', 'Notenschlüssel', 'Punkte, Prozent, BE-Rechner'],
+  ['gewichtung', 'grid', 'Gewichtung', 'Schriftlich : mündlich je Fach'],
   ['fehlzeiten', 'clock', 'Fehlzeiten', 'Versäumte Stunden'],
   ['druck', 'file', 'Notenübersicht', 'Drucken oder als PDF'],
   ['einstellungen', 'settings', 'Einstellungen', 'Untis, Gewichtung, Design'],

@@ -58,3 +58,34 @@ function dateStamp(s) {
   }
   return best;
 }
+
+/** Beginnt der Inhalt mit "%PDF" (ggf. nach ein paar Leerzeichen)? */
+export function looksLikePdf(bytes) {
+  const head = new TextDecoder('latin1').decode(bytes.slice(0, 1024));
+  return head.includes('%PDF-');
+}
+
+/** Download-Links von WordPress-Download-Manager-Seiten (…?wpdmdl=123). */
+export function findDownloadManagerLink(html, baseUrl) {
+  const fromLinks = extractLinks(html, baseUrl).find((l) => /[?&]wpdmdl=\d+/.test(l.url));
+  if (fromLinks) return fromLinks;
+  // Buttons tragen die Adresse oft in data-downloadurl="…"
+  const m = html.match(/https?:\/\/[^"'\s<>]*[?&](?:amp;)?wpdmdl=\d+[^"'\s<>]*/i);
+  if (m) return { url: decodeEntities(m[0]), text: 'Download' };
+  return null;
+}
+
+/**
+ * Lädt eine PDF. Liefert die Adresse statt der PDF eine Download-Seite (HTML),
+ * wird dort der eigentliche Download-Link gesucht (PDF-Link oder Download-Manager).
+ * fetchBytes(url) → { bytes: Uint8Array, url: finalUrl }
+ */
+export async function fetchPdf(url, { fetchBytes, pattern = 'klausur|klassenarbeit', depth = 0 } = {}) {
+  const { bytes, url: finalUrl } = await fetchBytes(url);
+  if (looksLikePdf(bytes)) return { bytes, url: finalUrl ?? url };
+  if (depth >= 2) throw new Error(`Unter ${url} liegt keine PDF.`);
+  const html = new TextDecoder().decode(bytes);
+  const link = findPdfLink(html, finalUrl ?? url, pattern) ?? findDownloadManagerLink(html, finalUrl ?? url);
+  if (!link || link.url === url) throw new Error(`Unter ${url} liegt keine PDF und kein Download-Link.`);
+  return fetchPdf(link.url, { fetchBytes, pattern, depth: depth + 1 });
+}

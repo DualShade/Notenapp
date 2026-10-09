@@ -3,8 +3,8 @@ import { getState, update, replaceState, resetState } from '../store.js';
 import { server, hasProxy, syncSubjectsWithTimetable, untisAccount, refreshUntis, disconnectUntis, currentTimetable } from '../data.js';
 import { openUntisConnect } from './untis-connect.js';
 import { APP_CONFIG } from '../config.js';
-import { ratioInput } from './common.js';
 import { getAccount } from '../sync.js';
+import { formatRatio } from '../grades.js';
 import { openKlausurImport } from './klausuren.js';
 import { loadDemo } from '../demo.js';
 
@@ -128,13 +128,12 @@ export function settingsView() {
             }
           }),
         }), 'Kommagetrennt')),
-      h('div', { class: 'field' },
-        h('span', { class: 'field-label' }, 'Leistungskurse: schriftlich : mündlich'),
-        ratioInput(settings.weights.LK, (w) => update((s) => { s.settings.weights.LK = w; }, { silent: true }))),
-      h('div', { class: 'field' },
-        h('span', { class: 'field-label' }, 'Grundkurse: schriftlich : mündlich'),
-        ratioInput(settings.weights.GK, (w) => update((s) => { s.settings.weights.GK = w; }, { silent: true })),
-        h('small', { class: 'hint' }, 'Abweichende Fächer stellst du im Fach unter „Bearbeiten“ ein.')),
+      h('a', { class: 'choice', href: '#/gewichtung' },
+        icon('grid', 22),
+        h('div', { class: 'grow' },
+          h('strong', {}, 'Gewichtung schriftlich : mündlich'),
+          h('div', { class: 'sub' }, `LK ${formatRatio(settings.weights.LK)} · GK ${formatRatio(settings.weights.GK)}${getState().subjects.some((x) => x.weights && !x.archived) ? ' · einzelne Fächer eigen' : ''}`)),
+        icon('chevron', 18)),
       toggle('lkDouble', 'LKs im Gesamtschnitt doppelt gewichten', 'Wie bei der Abiturberechnung.')),
 
     h('section', { class: 'card' },

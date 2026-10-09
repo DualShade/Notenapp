@@ -10,7 +10,7 @@ const SHELL = [
   'js/views/klausuren.js', 'js/views/schluessel.js', 'js/views/settings.js', 'js/views/untis-connect.js',
   'js/sync.js', 'js/sync-model.js', 'js/abi-calc.js', 'js/ics.js', 'js/klausur-calendar.js',
   'js/views/account.js', 'js/views/homework.js', 'js/views/absences.js', 'js/views/tasks.js', 'js/views/more.js',
-  'js/views/stats.js', 'js/views/abi.js', 'js/views/print.js',
+  'js/views/stats.js', 'js/views/abi.js', 'js/views/print.js', 'js/views/weights.js', 'js/dedupe.js',
 ];
 
 self.addEventListener('install', (event) => {

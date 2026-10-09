@@ -507,3 +507,11 @@ input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible
 .mapping > summary { font-weight: 700; }
 .mapping-row .small-select { max-width: 120px; }
 .small-select.needs-choice { border-color: var(--warn); }
+
+.weight-list { gap: 0; }
+.weight-row { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.weight-row:last-child { border-bottom: 0; }
+.weight-row .title { font-weight: 650; }
+.weight-row .sub { color: var(--muted); font-size: 13px; }
+.weight-row .segmented { flex-shrink: 0; }
+.weight-custom { padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }

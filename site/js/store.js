@@ -33,7 +33,7 @@ export function defaultState() {
       theme: 'auto',
       proxyUrl: '',
       untis: { server: '', school: '', schoolName: '', username: '', password: '' },
-      klausurSource: { pageUrl: '', pdfUrl: '', linkPattern: 'klausur', stufe: '' },
+      klausurSource: { pageUrl: '', pdfUrl: '', linkPattern: 'klausur|klassenarbeit', stufe: '' },
       autoImportKlausuren: false,
       autoSubjects: true,
     },

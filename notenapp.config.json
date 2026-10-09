@@ -7,8 +7,8 @@
   },
   "klausuren": {
     "pageUrl": "",
-    "pdfUrl": "",
-    "linkPattern": "klausur",
+    "pdfUrl": "https://www.lgoe.de/download/klassenarbeitsplan-11-1/?wpdmdl=228",
+    "linkPattern": "klausur|klassenarbeit",
     "stufe": ""
   },
   "lkThreshold": 4

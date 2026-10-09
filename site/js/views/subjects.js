@@ -44,7 +44,8 @@ export function subjectsView() {
     section('GK'),
     h('div', { class: 'row gap wrap' },
       h('button', { class: 'btn primary', onclick: () => openGradeEditor(null) }, icon('plus', 18), 'Note eintragen'),
-      h('button', { class: 'btn ghost', onclick: () => openSubjectEditor() }, icon('plus', 18), 'Fach hinzufügen')),
+      h('button', { class: 'btn ghost', onclick: () => openSubjectEditor() }, icon('plus', 18), 'Fach hinzufügen'),
+      h('a', { class: 'btn ghost', href: '#/gewichtung' }, 'Gewichtung')),
     archived.length ? h('details', { class: 'card' },
       h('summary', {}, `Ausgeblendete Fächer (${archived.length})`),
       h('div', { class: 'list' }, archived.map((s) => h('button', { class: 'list-item', onclick: () => openSubjectEditor(s) }, colorDot(s), h('div', { class: 'grow title' }, s.name))))) : null);

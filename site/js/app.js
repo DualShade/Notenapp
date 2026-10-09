@@ -14,6 +14,7 @@ import { absencesView } from './views/absences.js';
 import { statsView } from './views/stats.js';
 import { abiView } from './views/abi.js';
 import { printView } from './views/print.js';
+import { weightsView } from './views/weights.js';
 
 const TABS = [
   { path: '', label: 'Übersicht', icon: 'home' },
@@ -35,6 +36,7 @@ const ROUTES = {
   statistik: ['Statistik', () => statsView(), 'mehr'],
   abi: ['Abi-Rechner', () => abiView(), 'mehr'],
   schluessel: ['Notenschlüssel', () => schluesselView(), 'mehr'],
+  gewichtung: ['Gewichtung', () => weightsView(), 'mehr'],
   fehlzeiten: ['Fehlzeiten', () => absencesView(), 'mehr'],
   druck: ['Notenübersicht', () => printView(), 'mehr'],
   einstellungen: ['Einstellungen', () => settingsView(), 'mehr'],

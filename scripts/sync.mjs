@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetchUntisTimetable } from '../site/js/untis-client.js';
 import { normalizeTimetable, detectCourses, DEFAULT_LK_THRESHOLD } from '../site/js/timetable.js';
-import { findPdfLink } from '../site/js/link-finder.js';
+import { findPdfLink, fetchPdf } from '../site/js/link-finder.js';
 import { extractPdfRows } from '../site/js/pdf-text.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -40,7 +40,7 @@ async function loadConfig() {
     klausuren: {
       pageUrl: pick(env.KLAUSUR_PAGE_URL, cfg.klausuren?.pageUrl),
       pdfUrl: pick(env.KLAUSUR_PDF_URL, cfg.klausuren?.pdfUrl),
-      linkPattern: pick(env.KLAUSUR_LINK_PATTERN, cfg.klausuren?.linkPattern, 'klausur'),
+      linkPattern: pick(env.KLAUSUR_LINK_PATTERN, cfg.klausuren?.linkPattern, 'klausur|klassenarbeit'),
       stufe: pick(env.KLAUSUR_STUFE, cfg.klausuren?.stufe),
     },
     lkThreshold: Number(pick(env.LK_THRESHOLD, cfg.lkThreshold, DEFAULT_LK_THRESHOLD)),
@@ -72,10 +72,10 @@ async function syncUntis(cfg) {
   return { data: timetable, summary: `${timetable.lessons.length} Stunden, ${timetable.courses.length} Kurse` };
 }
 
-async function fetchBuffer(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+async function fetchBytes(url) {
+  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/pdf,text/html;q=0.9,*/*;q=0.8' }, redirect: 'follow' });
   if (!res.ok) throw new Error(`HTTP ${res.status} für ${url}`);
-  return { buffer: new Uint8Array(await res.arrayBuffer()), type: res.headers.get('content-type') ?? '' };
+  return { bytes: new Uint8Array(await res.arrayBuffer()), url: res.url || url };
 }
 
 async function syncKlausuren(cfg) {
@@ -93,9 +93,10 @@ async function syncKlausuren(cfg) {
     pdfUrl = link.url;
     linkText = link.text;
   }
-  const { buffer } = await fetchBuffer(pdfUrl);
+  // Direkte PDF oder Download-Seite (z. B. WordPress Download Manager "?wpdmdl=…")
+  const { bytes } = await fetchPdf(pdfUrl, { fetchBytes, pattern: k.linkPattern });
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const pages = await extractPdfRows(pdfjs, buffer, { verbosity: 0 });
+  const pages = await extractPdfRows(pdfjs, bytes, { verbosity: 0 });
   return {
     data: {
       fetchedAt: new Date().toISOString(),

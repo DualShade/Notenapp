@@ -67,12 +67,16 @@ export function looksLikePdf(bytes) {
 
 /** Download-Links von WordPress-Download-Manager-Seiten (…?wpdmdl=123). */
 export function findDownloadManagerLink(html, baseUrl) {
-  const fromLinks = extractLinks(html, baseUrl).find((l) => /[?&]wpdmdl=\d+/.test(l.url));
-  if (fromLinks) return fromLinks;
+  const found = extractLinks(html, baseUrl).filter((l) => /[?&]wpdmdl=\d+/.test(l.url));
   // Buttons tragen die Adresse oft in data-downloadurl="…"
-  const m = html.match(/https?:\/\/[^"'\s<>]*[?&](?:amp;)?wpdmdl=\d+[^"'\s<>]*/i);
-  if (m) return { url: decodeEntities(m[0]), text: 'Download' };
-  return null;
+  for (const m of html.matchAll(/https?:\/\/[^"'\s<>]*[?&](?:amp;)?wpdmdl=\d+[^"'\s<>]*/gi)) {
+    found.push({ url: decodeEntities(m[0]), text: 'Download' });
+  }
+  if (!found.length) return null;
+  // Auf einer Paketseite gehört der Download mit demselben Pfad zum Paket –
+  // "Ähnliche Downloads" (andere Stufen) daneben werden ignoriert.
+  const path = (u) => { try { return new URL(u, baseUrl).pathname.replace(/\/$/, ''); } catch { return null; } };
+  return found.find((l) => path(l.url) === path(baseUrl)) ?? found[0];
 }
 
 /**
@@ -85,7 +89,10 @@ export async function fetchPdf(url, { fetchBytes, pattern = 'klausur|klassenarbe
   if (looksLikePdf(bytes)) return { bytes, url: finalUrl ?? url };
   if (depth >= 2) throw new Error(`Unter ${url} liegt keine PDF.`);
   const html = new TextDecoder().decode(bytes);
-  const link = findPdfLink(html, finalUrl ?? url, pattern) ?? findDownloadManagerLink(html, finalUrl ?? url);
+  const base = finalUrl ?? url;
+  const own = findDownloadManagerLink(html, base);
+  const samePath = own && new URL(own.url, base).pathname.replace(/\/$/, '') === new URL(base).pathname.replace(/\/$/, '');
+  const link = (samePath ? own : null) ?? findPdfLink(html, base, pattern) ?? own;
   if (!link || link.url === url) throw new Error(`Unter ${url} liegt keine PDF und kein Download-Link.`);
   return fetchPdf(link.url, { fetchBytes, pattern, depth: depth + 1 });
 }

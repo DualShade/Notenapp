@@ -6,6 +6,7 @@
 // Umgebungsvariablen (überschreiben notenapp.config.json):
 //   UNTIS_SERVER, UNTIS_SCHOOL, UNTIS_USER, UNTIS_PASSWORD
 //   KLAUSUR_PAGE_URL, KLAUSUR_PDF_URL, KLAUSUR_LINK_PATTERN, KLAUSUR_STUFE
+//   KLAUSUR_PLAN_URL (Vorlage mit {jahrgang}/{halbjahr}), KLAUSUR_JAHRGANG, KLAUSUR_JAHRGANG_SCHULJAHR
 //   LK_THRESHOLD, OUT_DIR (Standard: dist/data), PAGES_URL (Fallback auf alte Daten)
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -14,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { fetchUntisTimetable } from '../site/js/untis-client.js';
 import { normalizeTimetable, detectCourses, DEFAULT_LK_THRESHOLD } from '../site/js/timetable.js';
 import { findPdfLink, fetchPdf } from '../site/js/link-finder.js';
+import { discoverPlans, sameDestination } from '../site/js/plan-discovery.js';
 import { extractPdfRows } from '../site/js/pdf-text.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -42,6 +44,9 @@ async function loadConfig() {
       pdfUrl: pick(env.KLAUSUR_PDF_URL, cfg.klausuren?.pdfUrl),
       linkPattern: pick(env.KLAUSUR_LINK_PATTERN, cfg.klausuren?.linkPattern, 'klausur|klassenarbeit'),
       stufe: pick(env.KLAUSUR_STUFE, cfg.klausuren?.stufe),
+      planUrl: pick(env.KLAUSUR_PLAN_URL, cfg.klausuren?.planUrl),
+      jahrgang: Number(pick(env.KLAUSUR_JAHRGANG, cfg.klausuren?.jahrgang, 0)),
+      jahrgangSchuljahr: Number(pick(env.KLAUSUR_JAHRGANG_SCHULJAHR, cfg.klausuren?.jahrgangSchuljahr, 0)),
     },
     lkThreshold: Number(pick(env.LK_THRESHOLD, cfg.lkThreshold, DEFAULT_LK_THRESHOLD)),
     outDir: path.resolve(root, pick(env.OUT_DIR, 'dist/data')),
@@ -78,35 +83,81 @@ async function fetchBytes(url) {
   return { bytes: new Uint8Array(await res.arrayBuffer()), url: res.url || url };
 }
 
+async function fetchText(url) {
+  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, redirect: 'follow' });
+  if (!res.ok) throw new Error(`HTTP ${res.status} für ${url}`);
+  return { text: await res.text(), url: res.url || url };
+}
+
+/** Gibt es die Seite – und zwar wirklich diese, keine Umleitung auf eine ähnliche? */
+async function exists(url) {
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, redirect: 'follow' });
+    await res.body?.cancel();
+    return res.ok && sameDestination(url, res.url || url);
+  } catch {
+    return false;
+  }
+}
+
+async function loadPlan(url, k) {
+  // Direkte PDF oder Download-Seite (z. B. WordPress Download Manager "?wpdmdl=…")
+  const { bytes } = await fetchPdf(url, { fetchBytes, pattern: k.linkPattern });
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  return extractPdfRows(pdfjs, bytes, { verbosity: 0 });
+}
+
+/** Pläne des aktuellen und (falls schon online) nächsten Halbjahres anhand der Vorlage. */
+async function discoveredPlans(k) {
+  const { plans, packages, targets } = await discoverPlans({
+    template: k.planUrl, jahrgang: k.jahrgang, jahrgangSchuljahr: k.jahrgangSchuljahr, exists, fetchText,
+  });
+  console.log(`🔎 klausuren: gesucht ${targets.map((t) => t.label).join(', ')} – gefunden ${plans.map((p) => `${p.label} (${p.via})`).join(', ') || 'nichts'}`);
+  if (packages.length) console.log(`   Pakete auf der Homepage: ${packages.map((p) => p.slug).join(', ')}`);
+  const loaded = [];
+  for (const plan of plans) {
+    try {
+      loaded.push({ ...plan, pages: await loadPlan(plan.url, k) });
+    } catch (err) {
+      console.warn(`⚠️  klausuren ${plan.label}: ${err.message}`);
+    }
+  }
+  return loaded;
+}
+
 async function syncKlausuren(cfg) {
   const k = cfg.klausuren;
-  if (!k.pageUrl && !k.pdfUrl) {
-    return { skipped: true, reason: 'Keine Klausurplan-Quelle (KLAUSUR_PAGE_URL oder KLAUSUR_PDF_URL).' };
+  if (!k.pageUrl && !k.pdfUrl && !k.planUrl) {
+    return { skipped: true, reason: 'Keine Klausurplan-Quelle (KLAUSUR_PLAN_URL, KLAUSUR_PAGE_URL oder KLAUSUR_PDF_URL).' };
   }
-  let pdfUrl = k.pdfUrl;
-  let linkText = null;
-  if (!pdfUrl) {
-    const res = await fetch(k.pageUrl, { headers: { 'User-Agent': USER_AGENT } });
-    if (!res.ok) throw new Error(`Homepage antwortet mit HTTP ${res.status}`);
-    const link = findPdfLink(await res.text(), res.url || k.pageUrl, k.linkPattern);
-    if (!link) throw new Error(`Kein PDF-Link mit „${k.linkPattern}“ auf ${k.pageUrl} gefunden.`);
-    pdfUrl = link.url;
-    linkText = link.text;
+  let plans = k.planUrl && k.jahrgang ? await discoveredPlans(k) : [];
+  let linkText = plans[0] ? `Klassenarbeitsplan ${plans[0].label}` : null;
+  if (!plans.length) {
+    // Fallback: feste PDF-Adresse oder PDF-Link auf einer Homepage-Seite
+    let pdfUrl = k.pdfUrl;
+    if (!pdfUrl) {
+      if (!k.pageUrl) throw new Error(`Kein Klassenarbeitsplan unter ${k.planUrl} gefunden.`);
+      const res = await fetch(k.pageUrl, { headers: { 'User-Agent': USER_AGENT } });
+      if (!res.ok) throw new Error(`Homepage antwortet mit HTTP ${res.status}`);
+      const link = findPdfLink(await res.text(), res.url || k.pageUrl, k.linkPattern);
+      if (!link) throw new Error(`Kein PDF-Link mit „${k.linkPattern}“ auf ${k.pageUrl} gefunden.`);
+      pdfUrl = link.url;
+      linkText = link.text;
+    }
+    plans = [{ label: null, url: pdfUrl, pages: await loadPlan(pdfUrl, k) }];
   }
-  // Direkte PDF oder Download-Seite (z. B. WordPress Download Manager "?wpdmdl=…")
-  const { bytes } = await fetchPdf(pdfUrl, { fetchBytes, pattern: k.linkPattern });
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const pages = await extractPdfRows(pdfjs, bytes, { verbosity: 0 });
+  const pages = plans.flatMap((p) => p.pages);
   return {
     data: {
       fetchedAt: new Date().toISOString(),
       pageUrl: k.pageUrl || null,
-      pdfUrl,
+      pdfUrl: plans[0].url,
       linkText,
       stufe: k.stufe || null,
+      plans: plans.map((p) => ({ label: p.label, url: p.url, jahrgang: p.jahrgang ?? null, halbjahr: p.halbjahr ?? null, pages: p.pages.length })),
       pages,
     },
-    summary: `${pages.length} Seiten aus ${pdfUrl}`,
+    summary: `${plans.map((p) => `${p.label ? `${p.label}: ` : ''}${p.pages.length} Seiten aus ${p.url}`).join(' · ')}`,
   };
 }
 

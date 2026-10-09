@@ -59,10 +59,23 @@ Die Zugangsdaten bleiben nur auf dem jeweiligen Gerät. Jeder, der die Seite nut
 - Das Untis-Passwort wird nie hochgeladen.
 
 ### 3. Klausurplan-Quelle angeben (optional)
-**Settings → Secrets and variables → Actions → Variables**
+Voreingestellt in `notenapp.config.json` (LGÖ):
+
+```json
+"planUrl": "https://www.lgoe.de/download/klassenarbeitsplan-{jahrgang}-{halbjahr}/",
+"jahrgang": 11, "jahrgangSchuljahr": 2026
+```
+
+Die Action setzt Jahrgang und Halbjahr selbst ein. 1. Halbjahr: August bis Januar, 2. Halbjahr: Februar bis Juli. Jedes Schuljahr zählt der Jahrgang eins hoch (2026/27 → 11, 2027/28 → 12).
+
+Sie lädt den Plan des aktuellen Halbjahres. Ist der Plan fürs nächste Halbjahr schon online, lädt sie ihn zusätzlich. Gibt es die erwartete Adresse nicht, durchsucht sie die Download-Pakete der Homepage (WordPress Download Manager) nach `…-11-2`. Nur wenn beides nichts findet, nimmt sie `pdfUrl`.
+
+Überschreiben lässt sich das unter **Settings → Secrets and variables → Actions → Variables**:
 
 | Variable | Bedeutung |
 |---|---|
+| `KLAUSUR_PLAN_URL` | Vorlage mit `{jahrgang}` und `{halbjahr}` |
+| `KLAUSUR_JAHRGANG`, `KLAUSUR_JAHRGANG_SCHULJAHR` | z. B. `11` und `2026` = Jahrgang 11 im Schuljahr 2026/27 |
 | `KLAUSUR_PAGE_URL` | Seite der Schul-Homepage, auf der der Klausurplan verlinkt ist. Die Action nimmt bei jedem Lauf den **aktuellen** PDF-Link. |
 | `KLAUSUR_LINK_PATTERN` | Text, der im Link oder Dateinamen vorkommt (Standard: `klausur`, z. B. `klausurplan_q1`) |
 | `KLAUSUR_PDF_URL` | Alternativ eine feste PDF-Adresse |

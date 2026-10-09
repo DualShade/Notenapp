@@ -6,6 +6,9 @@
     "weeksAhead": 5
   },
   "klausuren": {
+    "planUrl": "https://www.lgoe.de/download/klassenarbeitsplan-{jahrgang}-{halbjahr}/",
+    "jahrgang": 11,
+    "jahrgangSchuljahr": 2026,
     "pageUrl": "",
     "pdfUrl": "https://www.lgoe.de/download/klassenarbeitsplan-11-1/?wpdmdl=228",
     "linkPattern": "klausur|klassenarbeit",

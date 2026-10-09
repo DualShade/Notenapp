@@ -52,6 +52,9 @@ jobs:
           KLAUSUR_PDF_URL: ${{ vars.KLAUSUR_PDF_URL }}
           KLAUSUR_LINK_PATTERN: ${{ vars.KLAUSUR_LINK_PATTERN }}
           KLAUSUR_STUFE: ${{ vars.KLAUSUR_STUFE }}
+          KLAUSUR_PLAN_URL: ${{ vars.KLAUSUR_PLAN_URL }}
+          KLAUSUR_JAHRGANG: ${{ vars.KLAUSUR_JAHRGANG }}
+          KLAUSUR_JAHRGANG_SCHULJAHR: ${{ vars.KLAUSUR_JAHRGANG_SCHULJAHR }}
           LK_THRESHOLD: ${{ vars.LK_THRESHOLD }}
           PAGES_URL: ${{ steps.pages.outputs.base_url }}
 

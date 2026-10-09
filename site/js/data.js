@@ -274,6 +274,14 @@ export async function liveKlausurPages() {
   return { pages: await pdfToPages(bytes), pdfUrl: url, fetchedAt: new Date().toISOString() };
 }
 
+/** Geladene Klassenarbeitspläne der Action: [{ label, url }] (ältere Daten: nur pdfUrl). */
+export function serverPlans() {
+  const k = server.klausuren;
+  if (!k) return [];
+  if (k.plans?.length) return k.plans.map((p) => ({ label: p.label ? `Klassenarbeitsplan ${p.label}` : (k.linkText || 'PDF'), url: p.url }));
+  return [{ label: k.linkText || 'PDF öffnen', url: k.pdfUrl }];
+}
+
 /** Vorschläge (Datum + Fach) aus PDF-Seiten, ohne bereits importierte/ignorierte. */
 /** Infos zu einem Plan im Kalender-Layout (Kürzel, Groß/Klein) oder null. */
 export function planCalendar(pages) {

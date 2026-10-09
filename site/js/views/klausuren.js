@@ -3,7 +3,7 @@ import { getState, update, kindOf } from '../store.js';
 import { todayIso } from '../timetable.js';
 import {
   server, klausurProposals, importKlausuren, ignoreProposals, proposalToItem, liveKlausurPages,
-  pdfToPages, fetchExternal, planCalendar,
+  pdfToPages, fetchExternal, planCalendar, serverPlans,
 } from '../data.js';
 import { resolvePlanCode } from '../klausur-calendar.js';
 import { activeSubjects, subjectById, klausurRow, openKlausurEditor, openGradeEditor, colorDot } from './common.js';
@@ -198,8 +198,8 @@ export function klausurenView() {
       h('button', { class: 'btn ghost', onclick: () => openKlausurEditor() }, icon('plus', 18), 'Termin'),
       h('button', { class: 'btn ghost', title: 'Klausuren & Hausaufgaben als Kalender-Datei', onclick: () => downloadIcs(getState()) }, icon('calendar', 18), 'In Kalender')),
     server.klausuren ? h('p', { class: 'muted small' },
-      'Klausurplan der Homepage: ',
-      h('a', { href: server.klausuren.pdfUrl, target: '_blank', rel: 'noopener' }, server.klausuren.linkText || 'PDF öffnen'),
+      'Von der Homepage: ',
+      serverPlans().flatMap((p, i) => [i ? ', ' : null, h('a', { href: p.url, target: '_blank', rel: 'noopener' }, p.label)]),
       ` · Stand ${formatDateTime(server.klausuren.fetchedAt)}`) : null,
     h('section', { class: 'card' },
       h('h3', { class: 'card-title' }, `Anstehend (${upcoming.length})`),

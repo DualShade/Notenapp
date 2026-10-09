@@ -20,13 +20,17 @@ function monthOf(text) {
 
 /** Startjahr des Schuljahres aus "Schuljahr 2026/2027" bzw. "2026/27". */
 export function schoolYearStart(pages, now = new Date()) {
+  return schoolYearInText(pages) ?? (now.getMonth() + 1 >= 8 ? now.getFullYear() : now.getFullYear() - 1);
+}
+
+function schoolYearInText(pages) {
   for (const page of pages) {
     for (const row of page.rows) {
       const m = row.text.match(/(20\d{2})\s*[/–-]\s*(?:20)?(\d{2})(?!\d)/);
       if (m && (Number(m[2]) === (Number(m[1]) + 1) % 100)) return Number(m[1]);
     }
   }
-  return now.getMonth() + 1 >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+  return null;
 }
 
 function monthHeader(row) {
@@ -98,6 +102,8 @@ export function extractCalendar(pages, { now = new Date() } = {}) {
   const days = [];
   let found = false;
   for (const page of pages) {
+    // Mehrere Pläne (z. B. 11/2 und 12/1) können aus verschiedenen Schuljahren stammen
+    const pageYear = schoolYearInText([page]) ?? startYear;
     let cols = null;
     for (const row of page.rows) {
       const header = monthHeader(row);
@@ -109,7 +115,7 @@ export function extractCalendar(pages, { now = new Date() } = {}) {
         const m = parts[k].join(' ').replace(/\s+/g, ' ').trim().match(DAY_RE);
         if (!m) return;
         const day = Number(m[1]);
-        const year = col.month >= 8 ? startYear : startYear + 1;
+        const year = col.month >= 8 ? pageYear : pageYear + 1;
         const d = new Date(Date.UTC(year, col.month - 1, day));
         if (d.getUTCMonth() !== col.month - 1) return;
         const rest = m[3].trim();

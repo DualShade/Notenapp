@@ -1,6 +1,6 @@
 import { h, icon, field, toast, confirmDialog, formatDateTime } from '../ui.js';
 import { getState, update, replaceState, resetState } from '../store.js';
-import { server, hasProxy, syncSubjectsWithTimetable, untisAccount, refreshUntis, disconnectUntis, currentTimetable } from '../data.js';
+import { server, hasProxy, syncSubjectsWithTimetable, untisAccount, refreshUntis, disconnectUntis, currentTimetable, serverPlans } from '../data.js';
 import { openUntisConnect } from './untis-connect.js';
 import { APP_CONFIG } from '../config.js';
 import { getAccount } from '../sync.js';
@@ -151,7 +151,7 @@ export function settingsView() {
       h('h3', { class: 'card-title' }, 'Klausurplan (PDF)'),
       h('ul', { class: 'status-list small' },
         statusLine(status?.klausuren, 'Automatischer Abruf'),
-        server.klausuren ? h('li', {}, 'Quelle: ', h('a', { href: server.klausuren.pdfUrl, target: '_blank', rel: 'noopener' }, server.klausuren.pdfUrl)) : null),
+        serverPlans().map((p) => h('li', {}, 'Quelle: ', h('a', { href: p.url, target: '_blank', rel: 'noopener' }, p.label)))),
       toggle('autoImportKlausuren', 'Neue Termine automatisch übernehmen', 'Nur eindeutig zugeordnete Termine. Sonst erscheint auf der Übersicht ein Hinweis zum Prüfen.'),
       h('details', { class: 'more' },
         h('summary', {}, 'Quelle für Live-Abruf in der App'),

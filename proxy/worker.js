@@ -91,6 +91,6 @@ export default {
     } catch (err) {
       return json(env, { error: `Proxy-Fehler: ${err.message}` }, 502);
     }
-    return json(env, { ok: true, service: 'notenapp-proxy', routes: ['POST ?route=rpc', 'GET ?route=fetch&url='] });
+    return json(env, { ok: true, service: 'notenapp-proxy', version: 2, features: ['homework'], routes: ['POST ?route=rpc', 'GET ?route=fetch&url='] });
   },
 };

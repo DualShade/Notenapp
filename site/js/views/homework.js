@@ -94,7 +94,8 @@ export function homeworkRow(hw, today = todayIso()) {
       hw.done ? icon('check', 16) : null),
     h('button', { class: 'hw-body', onclick: () => openHomeworkEditor(hw) },
       h('div', { class: 'title' }, hw.title),
-      h('div', { class: 'sub' }, subject ? colorDot(subject) : null, subject ? ` ${subject.name}` : 'Ohne Fach', hw.notes ? ` · ${hw.notes}` : '')),
+      h('div', { class: 'sub' }, subject ? colorDot(subject) : null, subject ? ` ${subject.name}` : (hw.untis?.subject ?? 'Ohne Fach'),
+        hw.source === 'untis' ? ' · Untis' : '', hw.notes ? ` · ${hw.notes}` : '')),
     hw.done ? null : h('span', { class: `due ${due.cls}` }, due.text));
 }
 

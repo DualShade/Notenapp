@@ -2,7 +2,7 @@
 // erzeugte JSON-Dateien und PDF-Verarbeitung im Browser.
 
 import { getState, update, uid, kindOf, nextColor } from './store.js';
-import { normalizeTimetable, detectCourses, todayIso } from './timetable.js';
+import { normalizeTimetable, detectCourses, todayIso, mergeUntisHomework } from './timetable.js';
 import { extractPdfRows } from './pdf-text.js';
 import { extractCandidates, matchCandidates, klausurKey } from './klausur-parser.js';
 import { findPdfLink, fetchPdf } from './link-finder.js';
@@ -96,8 +96,20 @@ export function syncSubjectsWithTimetable() {
       if (c.occasional && !hasEntries(s, subject.id)) subject.archived = true;
     }
     dedupeSubjects(s);
+    importUntisHomework(s);
   }, { silent: true });
   return created;
+}
+
+/** Hausaufgaben aus dem aktuellen Untis-Stundenplan übernehmen. */
+function importUntisHomework(s) {
+  const tt = currentTimetable();
+  if (!tt?.homework) return 0;
+  const active = s.subjects.filter((x) => !x.archived);
+  const subjectFor = (courseKey, name) => (courseKey && active.find((x) => x.untisKey === courseKey)?.id)
+    || (name && active.find((x) => x.short === name || x.name === name || x.untisName === name)?.id)
+    || null;
+  return mergeUntisHomework(s, tt.homework, { subjectFor });
 }
 
 /** Doppelte Fächer (z. B. von zwei Geräten angelegt) zusammenführen. */
@@ -133,11 +145,12 @@ function proxyUrl(params) {
 
 /** fetch-Ersatz, der Anfragen an *.webuntis.com durch den Proxy tunnelt. */
 function tunnelFetch(url, init = {}) {
+  const method = (init.method ?? 'POST').toUpperCase();
   return fetch(proxyUrl({ route: 'rpc' }), {
     method: 'POST',
     // text/plain = "einfache" Anfrage ohne CORS-Preflight
     headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ url, cookie: init.headers?.Cookie ?? null, body: init.body ?? '' }),
+    body: JSON.stringify({ url, method, cookie: init.headers?.Cookie ?? null, body: init.body ?? '' }),
   });
 }
 

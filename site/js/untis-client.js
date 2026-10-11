@@ -43,11 +43,14 @@ export class UntisClient {
     return `https://${this.server}/WebUntis/jsonrpc.do?school=${encodeURIComponent(this.school)}`;
   }
 
-  async call(method, params = {}) {
-    const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  cookie() {
     const cookies = [`schoolname="_${encodeBase64(this.school)}"`];
     if (this.sessionId) cookies.push(`JSESSIONID=${this.sessionId}`);
-    headers.Cookie = cookies.join('; ');
+    return cookies.join('; ');
+  }
+
+  async call(method, params = {}) {
+    const headers = { 'Content-Type': 'application/json', Accept: 'application/json', Cookie: this.cookie() };
     const res = await this.fetch(this.url, {
       method: 'POST',
       headers,
@@ -118,6 +121,19 @@ export class UntisClient {
     }
   }
 
+  /**
+   * Hausaufgaben gibt es nur über die REST-API (nicht per JSON-RPC). Sie nutzt
+   * dieselbe Session. Liefert {homeworks, lessons, …} oder wirft.
+   */
+  async getHomework(startDate, endDate) {
+    const url = `https://${this.server}/WebUntis/api/homeworks/lessons?startDate=${toUntisDate(startDate)}&endDate=${toUntisDate(endDate)}`;
+    const res = await this.fetch(url, { method: 'GET', headers: { Accept: 'application/json', Cookie: this.cookie() } });
+    if (!res.ok) throw new UntisError(`Hausaufgaben: HTTP ${res.status}`, res.status);
+    const data = await res.json();
+    if (!data?.data) throw new UntisError('Hausaufgaben: unerwartete Antwort.');
+    return data.data;
+  }
+
   async getTimegrid() {
     try {
       return await this.call('getTimegridUnits', {});
@@ -154,7 +170,7 @@ function addDays(date, n) {
  * Ergebnis ist mit `normalizeTimetable` (timetable.js) weiterzuverarbeiten.
  */
 export async function fetchUntisTimetable({
-  server, school, username, password, weeksBack = 1, weeksAhead = 4, now = new Date(), fetchImpl,
+  server, school, username, password, weeksBack = 1, weeksAhead = 4, now = new Date(), fetchImpl, withHomework = true,
 }) {
   const client = new UntisClient({ server, school, username, password, fetchImpl });
   await client.login();
@@ -173,6 +189,16 @@ export async function fetchUntisTimetable({
       }
     }
     if (!periods.length && errors.length) throw new UntisError(errors[0]);
+
+    // Hausaufgaben: auch die der letzten Wochen, damit noch offene drin sind
+    let homework = null;
+    if (withHomework) {
+      try {
+        homework = await client.getHomework(addDays(firstMonday, -21), addDays(firstMonday, 7 * (weeksBack + weeksAhead) + 6));
+      } catch (err) {
+        errors.push(`Hausaufgaben: ${err.message}`);
+      }
+    }
 
     const timegrid = await client.getTimegrid();
     // Namenslisten nur nachladen, wenn Untis nur IDs geliefert hat.
@@ -198,6 +224,7 @@ export async function fetchUntisTimetable({
       timegrid,
       lookups,
       periods,
+      homework,
       warnings: errors,
     };
   } finally {

@@ -22,7 +22,7 @@ function tunnel(proxyUrl, rewrite = (u) => u, call = (req) => fetch(req)) {
   return (url, init = {}) => call(new Request(`${proxyUrl}?route=rpc`, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ url: rewrite(url), cookie: init.headers?.Cookie ?? null, body: init.body ?? '' }),
+    body: JSON.stringify({ url: rewrite(url), method: init.method ?? 'POST', cookie: init.headers?.Cookie ?? null, body: init.body ?? '' }),
   }));
 }
 
@@ -61,6 +61,9 @@ test('Worker-Proxy: kompletter Login über den Tunnel', async () => {
     const courses = detectCourses(normalizeTimetable(raw).lessons);
     assert.deepEqual(courses.map((c) => [c.key, c.kind]), [['M-L1', 'LK'], ['D-G1', 'GK']]);
     assert.ok(log.some((l) => /JSESSIONID=SESSION42/.test(l.cookie)), 'Session-Cookie wird weitergereicht');
+    // Hausaufgaben per GET über denselben Tunnel
+    const hw = normalizeTimetable(raw).homework;
+    assert.deepEqual(hw.map((x) => [x.text, x.due, x.courseKey]), [['S. 42 Nr. 3a–c', '2026-10-07', 'M-L1']]);
     // falsches Passwort
     await assert.rejects(fetchUntisTimetable({ server: 'mock.webuntis.com', school: 'x', username: 'max', password: 'nein', fetchImpl }), /bad credentials/);
     // CORS-Header
@@ -77,6 +80,8 @@ test('Worker-Proxy: nur webuntis.com und freigegebene Hosts', async () => {
   assert.equal((await rpc('https://evil.example.com/x')).status, 403);
   assert.equal((await rpc('http://mock.webuntis.com/x')).status, 403);
   assert.equal((await rpc('https://webuntis.com.evil.net/x')).status, 403);
+  const getRpc = (url) => worker.fetch(new Request('https://proxy.test/?route=rpc', { method: 'POST', body: JSON.stringify({ url, method: 'GET' }) }), env);
+  assert.equal((await getRpc('https://mock.webuntis.com/WebUntis/jsonrpc.do')).status, 403);
   const fetchRoute = (url) => worker.fetch(new Request(`https://proxy.test/?route=fetch&url=${encodeURIComponent(url)}`), env);
   assert.equal((await fetchRoute('https://intranet.local/geheim')).status, 403);
 });
@@ -108,12 +113,15 @@ test('PHP-Proxy: Schulsuche + Login + Stundenplan', { skip: !phpAvailable && 'ph
   assert.equal(schools[0].name, 'Gymnasium Musterstadt');
   const raw = await fetchUntisTimetable({ server: 'mock.webuntis.com', school: 'gym-musterstadt', username: 'max', password: 'geheim', weeksBack: 0, weeksAhead: 0, fetchImpl });
   assert.equal(raw.periods.length, 5);
+  assert.equal(raw.homework?.homeworks?.[0]?.id, 501, 'Hausaufgaben per GET über den PHP-Proxy');
   assert.ok(upstream.calls.some((c) => c.method === 'getTimetable' && /JSESSIONID=SESSION42/.test(c.cookie)));
   await assert.rejects(fetchUntisTimetable({ server: 'mock.webuntis.com', school: 'x', username: 'max', password: 'nein', fetchImpl }), /bad credentials/);
 
   const res = await fetch(`${base}?route=rpc`, { method: 'POST', body: JSON.stringify({ url: 'https://evil.example.com/', body: '{}' }) });
   assert.equal(res.status, 403);
   assert.equal(res.headers.get('access-control-allow-origin'), 'https://dualshade.github.io');
+  const getRpc = await fetch(`${base}?route=rpc`, { method: 'POST', body: JSON.stringify({ url: `http://127.0.0.1:${upstream.port}/WebUntis/jsonrpc.do`, method: 'GET' }) });
+  assert.equal(getRpc.status, 403, 'GET nur auf /WebUntis/api/');
   const blocked = await fetch(`${base}?route=fetch&url=${encodeURIComponent('http://127.0.0.1:1/x')}`);
   assert.equal(blocked.status, 403);
 });

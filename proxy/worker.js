@@ -3,6 +3,7 @@
 //
 //   POST ?route=rpc    {url, cookie, body}  → leitet JSON-RPC an *.webuntis.com weiter
 //                                             (Schulsuche, Login, Stundenplan)
+//                      {url, method:"GET", cookie} → GET auf /WebUntis/api/… (Hausaufgaben)
 //   GET  ?route=fetch&url=…                 → Homepage/PDF abrufen (nur ALLOWED_HOSTS)
 //
 // Die ganze Untis-Logik läuft in der App; der Proxy reicht nur durch und
@@ -48,9 +49,17 @@ async function rpc(request, env) {
   if (target.protocol !== 'https:' || !RPC_HOST.test(target.hostname)) {
     return json(env, { error: 'Nur https://*.webuntis.com ist erlaubt.' }, 403);
   }
+  const method = String(payload.method ?? 'POST').toUpperCase();
+  // GET nur für die REST-API (Hausaufgaben), alles andere ist JSON-RPC per POST
+  if (method === 'GET' && !target.pathname.startsWith('/WebUntis/api/')) {
+    return json(env, { error: 'GET nur für /WebUntis/api/ erlaubt.' }, 403);
+  }
+  if (method !== 'GET' && method !== 'POST') return json(env, { error: 'Ungültige Methode.' }, 400);
   const headers = { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'Notenapp' };
   if (payload.cookie) headers.Cookie = String(payload.cookie).slice(0, 2000);
-  const upstream = await fetch(target, { method: 'POST', headers, body: String(payload.body ?? '') });
+  const upstream = method === 'GET'
+    ? await fetch(target, { method: 'GET', headers, redirect: 'manual' })
+    : await fetch(target, { method: 'POST', headers, body: String(payload.body ?? '') });
   return new Response(upstream.body, { status: upstream.status, headers: cors(env, { 'Content-Type': 'application/json' }) });
 }
 

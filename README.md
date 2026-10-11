@@ -8,7 +8,7 @@ Notenapp für die Oberstufe im **Punktesystem (0–15)** als Web-App auf **GitHu
 - **Notenschlüssel**: Tabelle 15 → 0 Punkte mit Prozentgrenzen und den nötigen Bewertungseinheiten (BE), dazu ein Klausur-Rechner, eine Umrechnung Punkte ↔ Note und ein eigener Schlüssel.
 - **Noten wie in einer Notenapp**: Fächer, Halbjahre (EF.1 … Q2.2), schriftlich und sonstige Mitarbeit als Verhältnis gewichtet (Standard LK 2:1, GK 1:1, je Fach anpassbar), dazu Fach- und Gesamtschnitt sowie Zeugnisnoten pro Halbjahr.
 - **Konto & Cloud-Sync**: Registrierung mit E-Mail und Passwort. Alles wird automatisch gesichert und zwischen Geräten synchronisiert, auch offline. Änderungen werden pro Eintrag zusammengeführt, sodass nichts verloren geht. Es gibt einen Passwort-Reset per Mail, und du kannst dein Konto jederzeit löschen.
-- **Hausaufgaben**: Fällig standardmäßig zur nächsten Stunde des Fachs laut Untis. Überfällige werden markiert, erledigte abgehakt.
+- **Hausaufgaben**: Was Lehrkräfte in Untis eintragen, wird automatisch übernommen und dem richtigen Fach zugeordnet. Eigene Hausaufgaben sind standardmäßig zur nächsten Stunde des Fachs fällig. Überfällige werden markiert, erledigte abgehakt.
 - **Wunschnote**: „Für 13 Punkte brauchst du in der nächsten Klausur mindestens 15.“
 - **Abi-Rechner**: Block I mit automatischer Auswahl der besten Kurse (LK doppelt) und Block II. Fehlende Halbjahre und Prüfungen werden als Prognose geschätzt. Dazu Unterkurs-Warnungen und was du für deine Wunsch-Abinote brauchst.
 - **Statistik**: Gesamtschnitt pro Halbjahr, Notenverteilung, Verlauf pro Fach, Stärken und Schwächen.
@@ -41,6 +41,8 @@ Browser dürfen WebUntis nicht direkt ansprechen. WebUntis erlaubt keine Cross-O
 cd proxy
 npx wrangler deploy   # vorher ALLOWED_ORIGIN / ALLOWED_HOSTS in wrangler.toml setzen
 ```
+
+> **Hausaufgaben aus Untis** laufen über die Untis-REST-API (`/WebUntis/api/homeworks/lessons`). Dafür braucht es die aktuelle Proxy-Version. Hast du den Proxy schon früher hochgeladen, lad `notenapp-proxy.php` bzw. den Worker einmal neu hoch. Ob die neue Version läuft, siehst du beim Aufruf der Proxy-URL im Browser an `"version":2`. Mit einem alten Proxy lädt der Stundenplan weiter, nur die Hausaufgaben fehlen.
 
 Die Proxy-Adresse steht in `site/js/config.js` (Standard: `https://dualshade.xyz/notenapp-proxy.php`). Alternativ legst du unter **Settings → Secrets and variables → Actions → Variables** die Variable **`PROXY_URL`** an, die beim Build Vorrang hat. In der App erscheint dann **„Mit Untis verbinden“**:
 

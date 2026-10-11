@@ -98,8 +98,43 @@ export function normalizeTimetable(raw) {
     range: raw.range,
     timegrid,
     lessons,
+    homework: normalizeHomework(raw.homework, lessons),
     warnings: raw.warnings ?? [],
   };
+}
+
+const sameName = (a, b) => !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+
+/**
+ * Untis-Hausaufgaben (REST-Antwort {homeworks, lessons}) → flache Liste.
+ * Das Fach steht bei Untis nur als Name am Unterricht; der Kurs (z. B. "M-L1")
+ * wird über eine passende Stunde im Stundenplan ermittelt – bevorzugt dieselbe
+ * Unterrichtsnummer, sonst eine Stunde am Tag der Aufgabe.
+ */
+export function normalizeHomework(raw, lessons = []) {
+  if (!raw?.homeworks) return null;
+  const untisLessons = new Map((raw.lessons ?? []).map((l) => [l.id, l]));
+  return raw.homeworks
+    .filter((hw) => hw?.id != null && hw.dueDate)
+    .map((hw) => {
+      const subject = untisLessons.get(hw.lessonId)?.subject ?? null;
+      const date = hw.date ? untisDate(hw.date) : null;
+      const candidates = lessons.filter((l) => sameName(l.subject?.short, subject) || sameName(l.subject?.long, subject));
+      const match = candidates.find((l) => l.lessonNumber != null && l.lessonNumber === hw.lessonId)
+        ?? candidates.find((l) => l.date === date)
+        ?? candidates[0];
+      return {
+        id: hw.id,
+        date,
+        due: untisDate(hw.dueDate),
+        text: String(hw.text ?? '').trim(),
+        remark: String(hw.remark ?? '').trim() || null,
+        completed: !!hw.completed,
+        subject,
+        courseKey: match?.courseKey ?? null,
+      };
+    })
+    .sort((a, b) => a.due.localeCompare(b.due));
 }
 
 /** Stundenraster aus Untis; fällt auf die tatsächlich vorkommenden Startzeiten zurück. */
@@ -247,4 +282,45 @@ export function slotSpan(lesson, grid) {
     last = best;
   }
   return { first, last };
+}
+
+/**
+ * Untis-Hausaufgaben in die eigene Liste übernehmen. Neue werden angelegt,
+ * geänderte (Text, Fälligkeit) aktualisiert. Eigene Änderungen bleiben, solange
+ * sich in Untis nichts ändert; selbst gelöschte kommen nicht wieder.
+ * `subjectFor(courseKey, subjectName)` liefert die Fach-ID oder null.
+ * Gibt die Zahl neu angelegter Hausaufgaben zurück.
+ */
+export function mergeUntisHomework(state, list, { subjectFor = () => null, now = Date.now() } = {}) {
+  if (!Array.isArray(list)) return 0;
+  const deleted = state.deleted?.homework ?? {};
+  let created = 0;
+  for (const u of list) {
+    const id = `untis-hw-${u.id}`;
+    const snapshot = { text: u.text, remark: u.remark, due: u.due, completed: u.completed, courseKey: u.courseKey, subject: u.subject };
+    const title = u.text || (u.remark ?? 'Hausaufgabe');
+    const notes = u.text && u.remark ? u.remark : '';
+    const existing = state.homework.find((x) => x.id === id);
+    if (!existing) {
+      if (deleted[id]) continue;
+      state.homework.push({
+        id, subjectId: subjectFor(u.courseKey, u.subject), title, notes, due: u.due,
+        done: u.completed, doneAt: u.completed ? now : null, createdAt: now, source: 'untis', untis: snapshot,
+      });
+      created++;
+      continue;
+    }
+    const prev = existing.untis ?? {};
+    if (JSON.stringify(prev) === JSON.stringify(snapshot)) {
+      // Fach erst später erkannt (z. B. Fächer neu angelegt) → nachtragen
+      if (!existing.subjectId) existing.subjectId = subjectFor(u.courseKey, u.subject) ?? null;
+      continue;
+    }
+    if (prev.text !== u.text || prev.remark !== u.remark) { existing.title = title; existing.notes = notes; }
+    if (prev.due !== u.due) existing.due = u.due;
+    if (prev.courseKey !== u.courseKey || !existing.subjectId) existing.subjectId = subjectFor(u.courseKey, u.subject) ?? existing.subjectId ?? null;
+    if (u.completed && !prev.completed && !existing.done) { existing.done = true; existing.doneAt = now; }
+    existing.untis = snapshot;
+  }
+  return created;
 }

@@ -4,6 +4,7 @@
 // Gleiches Protokoll wie proxy/worker.js:
 //
 //   POST ?route=rpc    {url, cookie, body}  → leitet JSON-RPC an *.webuntis.com weiter
+//                      {url, method:"GET", cookie} → GET auf /WebUntis/api/… (Hausaufgaben)
 //   GET  ?route=fetch&url=…                 → Homepage/PDF abrufen (nur ALLOWED_HOSTS)
 //
 // Der Proxy speichert und protokolliert nichts.
@@ -46,13 +47,13 @@ function host_allowed($list, $host) {
     return false;
 }
 
-function forward($url, $method, $headers, $body = null) {
+function forward($url, $method, $headers, $body = null, $follow = null) {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_CUSTOMREQUEST => $method,
         CURLOPT_HTTPHEADER => $headers,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => $method === 'GET',
+        CURLOPT_FOLLOWLOCATION => $follow === null ? $method === 'GET' : $follow,
         CURLOPT_MAXREDIRS => 5,
         CURLOPT_TIMEOUT => 30,
         CURLOPT_HEADER => false,
@@ -82,11 +83,19 @@ if ($route === 'rpc' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$schemeOk || !preg_match($RPC_HOST_PATTERN, $host)) {
         respond_json(['error' => 'Nur https://*.webuntis.com ist erlaubt.'], 403);
     }
+    $method = strtoupper((string) ($payload['method'] ?? 'POST'));
+    // GET nur für die REST-API (Hausaufgaben), alles andere ist JSON-RPC per POST
+    if ($method === 'GET' && strpos($parts['path'] ?? '', '/WebUntis/api/') !== 0) {
+        respond_json(['error' => 'GET nur für /WebUntis/api/ erlaubt.'], 403);
+    }
+    if ($method !== 'GET' && $method !== 'POST') respond_json(['error' => 'Ungültige Methode.'], 400);
     $headers = ['Content-Type: application/json', 'Accept: application/json', 'User-Agent: Notenapp'];
     if (!empty($payload['cookie'])) {
         $headers[] = 'Cookie: ' . preg_replace('/[\r\n]/', '', substr((string) $payload['cookie'], 0, 2000));
     }
-    list($status, , $body) = forward($payload['url'], 'POST', $headers, (string) ($payload['body'] ?? ''));
+    list($status, , $body) = $method === 'GET'
+        ? forward($payload['url'], 'GET', $headers, null, false)
+        : forward($payload['url'], 'POST', $headers, (string) ($payload['body'] ?? ''));
     http_response_code($status);
     header('Content-Type: application/json');
     echo $body;
@@ -107,4 +116,4 @@ if ($route === 'fetch' && $_SERVER['REQUEST_METHOD'] === 'GET') {
     exit;
 }
 
-respond_json(['ok' => true, 'service' => 'notenapp-proxy', 'routes' => ['POST ?route=rpc', 'GET ?route=fetch&url=']]);
+respond_json(['ok' => true, 'service' => 'notenapp-proxy', 'version' => 2, 'features' => ['homework'], 'routes' => ['POST ?route=rpc', 'GET ?route=fetch&url=']]);

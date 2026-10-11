@@ -6,6 +6,13 @@ export const MOCK_SCHOOLS = [
   { displayName: 'Gesamtschule Musterstadt', address: '12345 Musterstadt, Parkallee 3', server: 'mock.webuntis.com', loginName: 'ge-musterstadt', schoolId: 2, serverUrl: '' },
 ];
 
+export const MOCK_HOMEWORK = {
+  records: [{ homeworkId: 501, teacherId: 1, elementIds: [7] }],
+  homeworks: [{ id: 501, lessonId: 900, date: 20261005, dueDate: 20261007, text: 'S. 42 Nr. 3a–c', remark: '', completed: false, attachments: [] }],
+  lessons: [{ id: 900, subject: 'M', lessonType: 'Unterricht' }],
+  teachers: [{ id: 1, name: 'ABC' }],
+};
+
 function untisDate(d) {
   return Number(d.toISOString().slice(0, 10).replaceAll('-', ''));
 }
@@ -14,6 +21,10 @@ function untisDate(d) {
 export function handleUntis(pathname, rpc, cookie = '') {
   const ok = (result) => ({ status: 200, json: { jsonrpc: '2.0', id: rpc.id, result } });
   const err = (code, message) => ({ status: 200, json: { jsonrpc: '2.0', id: rpc.id, error: { code, message } } });
+  if (pathname.endsWith('/WebUntis/api/homeworks/lessons')) {
+    if (!/JSESSIONID=SESSION42/.test(cookie)) return { status: 401, json: { error: 'not authenticated' } };
+    return { status: 200, json: { data: MOCK_HOMEWORK } };
+  }
   if (pathname.endsWith('/schoolquery2')) {
     const q = String(rpc.params?.[0]?.search ?? '').toLowerCase();
     if (q === 'schule') return err(-6003, 'too many results');

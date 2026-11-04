@@ -18,9 +18,11 @@ function untisDate(d) {
 }
 
 /** Beantwortet einen JSON-RPC-Aufruf. Liefert {status, json}. */
-export function handleUntis(pathname, rpc, cookie = '') {
+export function handleUntis(pathname, rpc, cookie = '', method = 'POST') {
   const ok = (result) => ({ status: 200, json: { jsonrpc: '2.0', id: rpc.id, result } });
   const err = (code, message) => ({ status: 200, json: { jsonrpc: '2.0', id: rpc.id, error: { code, message } } });
+  // Die REST-API antwortet nur auf GET – wie Untis selbst
+  if (pathname.includes('/WebUntis/api/') && method !== 'GET') return { status: 405, json: { error: 'method not allowed' } };
   if (pathname.endsWith('/WebUntis/api/homeworks/lessons')) {
     if (!/JSESSIONID=SESSION42/.test(cookie)) return { status: 401, json: { error: 'not authenticated' } };
     return { status: 200, json: { data: MOCK_HOMEWORK } };
@@ -63,7 +65,7 @@ export function startMockUntisServer() {
     for await (const chunk of req) body += chunk;
     const rpc = JSON.parse(body || '{}');
     calls.push({ method: rpc.method, cookie: req.headers.cookie ?? '' });
-    const { status, json } = handleUntis(new URL(req.url, 'http://x').pathname, rpc, req.headers.cookie ?? '');
+    const { status, json } = handleUntis(new URL(req.url, 'http://x').pathname, rpc, req.headers.cookie ?? '', req.method);
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(json));
   });

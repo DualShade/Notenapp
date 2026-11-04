@@ -14,14 +14,14 @@ hat, im `CHANGELOG.md` und in Git.
 | `site/js/data.js` | Datenquellen: die von der Action erzeugten JSON-Dateien, der Untis-Login über den Proxy (`tunnelFetch`), der Klausurplan-Import aus PDFs, das Übernehmen von Untis-Hausaufgaben. |
 | `site/js/sync.js`, `sync-model.js` | Konto und Cloud-Sync mit `notenapp-api.php`; `sync-model.js` führt lokalen und Cloud-Stand pro Eintrag zusammen. |
 | `site/js/config.js` | Die Server-Adressen (Proxy, Konto-API). Der Build überschreibt sie mit den GitHub-Variablen `PROXY_URL` / `API_URL`. |
-| Rechen- und Parser-Module in `site/js/` | `grades.js` (Punkte, Schnitte, Notenschlüssel), `abi-calc.js`, `timetable.js` (Untis-Rohdaten, LK/GK-Erkennung, Hausaufgaben), `klausur-parser.js`, `klausur-calendar.js`, `pdf-text.js`, `link-finder.js`, `plan-discovery.js`, `dedupe.js`, `ics.js`, `untis-client.js` (WebUntis-Client für Browser, Node und Worker). |
+| Rechen- und Parser-Module in `site/js/` | `grades.js` (Punkte, Schnitte, Notenschlüssel), `abi-calc.js`, `timetable.js` (Untis-Rohdaten, LK/GK-Erkennung, Hausaufgaben), `klausur-parser.js`, `klausur-calendar.js`, `pdf-text.js`, `link-finder.js`, `plan-discovery.js`, `dedupe.js`, `ics.js` (`buildIcs` rechnet; `downloadIcs` ist die einzige Funktion mit DOM), `untis-client.js` (WebUntis-Client für Browser, Node und Worker). |
 | `site/js/views/` | Eine Datei pro Ansicht; `common.js` hält geteilte Bausteine, `untis-connect.js` den Untis-Login-Dialog. `ui.js` (eine Ebene höher) sind die DOM-Helfer. |
 | `site/js/demo.js` | Demo-Daten zum Ausprobieren ohne Untis-Zugang. |
 | `scripts/build.mjs` | Baut `dist/`: kopiert `site/`, legt pdf.js lokal ab, setzt die Service-Worker-Version und die Server-Adressen. |
 | `scripts/sync.mjs` | Läuft in der Action: holt Stundenplan (WebUntis) und Klausurplan (PDF) nach `dist/data/`. Einstellungen aus `notenapp.config.json` und Umgebungsvariablen. |
 | `scripts/serve.mjs` | Lokaler Server für `dist/`. |
 | `proxy/notenapp-proxy.php` | Der Untis-/Homepage-Proxy für PHP-Webspace. Browser dürfen WebUntis nicht direkt ansprechen; der Proxy reicht nur durch und speichert nichts. |
-| `proxy/worker.js`, `wrangler.toml` | Derselbe Proxy als Cloudflare Worker, mit demselben Protokoll. |
+| `proxy/worker.js`, `proxy/wrangler.toml` | Derselbe Proxy als Cloudflare Worker, mit demselben Protokoll. |
 | `proxy/notenapp-api.php` | Die Konto-API: Konten, Cloud-Sync, Passwort-Reset per Mail, Kalender-Abo. Daten als Dateien in `notenapp-data/`, jede mit einer PHP-`exit`-Zeile davor. |
 | `tests/` | `node --test`. `helpers/mock-untis.mjs` spielt WebUntis. Die PHP-Tests starten echtes `php -S` und werden übersprungen, wenn PHP fehlt. |
 | `.github/workflows/pages.yml` | Tests, Build, Datenabruf und Veröffentlichung auf GitHub Pages: bei jedem Push auf den Standard-Branch und nach Zeitplan (Schultage stündlich). |
@@ -30,8 +30,9 @@ hat, im `CHANGELOG.md` und in Git.
 
 `proxy/notenapp-proxy.php` und `proxy/notenapp-api.php` laufen auf dem IONOS-Webspace von
 dualshade.xyz. Dort liegen sie als Kopie im Repo `DualShade/dualshade.xyz` unter `static/`,
-mit einer ersten Zeile `// Quelle: github.com/DualShade/Notenapp (…) – dort pflegen und hierher
-kopieren.` Geändert wird hier, dann wird kopiert (mit dieser Zeile) und die Website neu
+mit einer zweiten Zeile direkt nach `<?php`: `// Quelle: github.com/DualShade/Notenapp (…) – dort
+pflegen und hierher kopieren.` (Vor `<?php` würde PHP sie als Text ausgeben und die JSON-Antwort
+zerstören.) Geändert wird hier, dann wird kopiert (mit dieser Zeile) und die Website neu
 hochgeladen; eine Änderung, die nur in der Kopie steht, geht beim nächsten Kopieren verloren.
 
 ## Wo neuer Code hingehört
@@ -42,7 +43,9 @@ hochgeladen; eine Änderung, die nur in der Kopie steht, geht beim nächsten Kop
 - Eine neue Ansicht: `site/js/views/<name>.js`, in `app.js` eingehängt.
 - Alles, was der Browser von fremden Hosts braucht, geht über den Proxy (`tunnelFetch` in
   `data.js`). Eine neue Proxy-Route oder -Regel kommt in `notenapp-proxy.php` und `worker.js`
-  zugleich, mit einem Test für beide in `tests/proxy.test.mjs`.
+  zugleich, mit einem Test für beide in `tests/proxy.test.mjs`, und erhöht `version` in der
+  Statusantwort beider Varianten und im README, damit man einem hochgeladenen Proxy den Stand
+  ansieht.
 - Was der Server speichern muss: nur in `notenapp-api.php`, als Datei unter `notenapp-data/`
   mit der `GUARD`-Zeile. Neue Einstellungen dort oben unter „Einstellungen“, überschreibbar
   mit einer Umgebungsvariable `NOTENAPP_…`.
@@ -53,10 +56,13 @@ hochgeladen; eine Änderung, die nur in der Kopie steht, geht beim nächsten Kop
 - Die Rechen- und Parser-Module importieren nur einander (`klausur-calendar.js` →
   `klausur-parser.js`), nie `ui.js`, `store.js`, `data.js`, `sync.js` oder eine Ansicht.
 - `store.js` nutzt nur `grades.js`, `timetable.js` und `sync-model.js`.
-- `data.js` und `sync.js` nutzen `store.js`, `config.js` und die Rechenmodule, nie eine Ansicht.
-- Ansichten importieren `ui.js`, `store.js`, `data.js`, `sync.js` und `views/common.js`; eine
-  Ansicht darf Bausteine einer anderen nutzen (z. B. `overview.js` die Hausaufgabenliste). Außer
-  `app.js` importiert nichts außerhalb von `views/` eine Ansicht.
+- `data.js` nutzt `store.js`, `config.js` und die Rechenmodule; `sync.js` nutzt `store.js`,
+  `config.js`, `sync-model.js` und `data.js`. Keins von beiden importiert eine Ansicht.
+- `demo.js` nutzt `store.js`, `timetable.js`, `data.js`, `sync.js` und `ui.js`, nie eine Ansicht.
+- Ansichten importieren `ui.js`, `store.js`, `data.js`, `sync.js`, `sync-model.js`, `config.js`,
+  `demo.js`, die Rechenmodule und `views/common.js`; eine Ansicht darf Bausteine einer anderen
+  nutzen (z. B. `overview.js` die Hausaufgabenliste). Außer `app.js` importiert nichts außerhalb
+  von `views/` eine Ansicht.
 - `scripts/sync.mjs` nutzt nur die Rechen- und Parser-Module und `pdfjs-dist`.
 - Die PHP-Dateien und `worker.js` hängen von nichts im Repo ab und teilen keinen Code; Proxy
   in PHP und Worker halten dasselbe Protokoll, abgesichert durch dieselben Tests.

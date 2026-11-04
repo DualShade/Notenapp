@@ -18,7 +18,8 @@ before(async () => {
   dataDir = await mkdtemp(path.join(tmpdir(), 'notenapp-api-'));
   mailLog = path.join(dataDir, 'mail.log');
   const port = 19000 + Math.floor(Math.random() * 1000);
-  php = spawn('php', ['-S', `127.0.0.1:${port}`, 'proxy/notenapp-api.php'], {
+  // Fehler anzeigen wie ein Webspace mit display_errors: jede Warnung zerstört dann die JSON-Antwort
+  php = spawn('php', ['-d', 'display_errors=1', '-d', 'error_reporting=-1', '-S', `127.0.0.1:${port}`, 'proxy/notenapp-api.php'], {
     env: { ...process.env, NOTENAPP_DATA_DIR: path.join(dataDir, 'store'), NOTENAPP_MAIL_LOG: mailLog, NOTENAPP_ALLOWED_ORIGIN: 'https://dualshade.github.io' },
     stdio: 'ignore',
   });
@@ -104,7 +105,7 @@ test('Reset-Mail: Envelope-Absender und Auto-Submitted gehen an sendmail', { ski
   const sendmail = path.join(dir, 'sendmail.sh');
   await writeFile(sendmail, `#!/bin/sh\nprintf '%s\\n' "$@" > "${dir}/args"\ncat > "${dir}/message"\n`, { mode: 0o755 });
   const port = 20000 + Math.floor(Math.random() * 1000);
-  const server = spawn('php', ['-d', `sendmail_path=${sendmail}`, '-S', `127.0.0.1:${port}`, 'proxy/notenapp-api.php'], {
+  const server = spawn('php', ['-d', 'display_errors=1', '-d', 'error_reporting=-1', '-d', `sendmail_path=${sendmail}`, '-S', `127.0.0.1:${port}`, 'proxy/notenapp-api.php'], {
     env: { ...process.env, NOTENAPP_DATA_DIR: path.join(dir, 'store'), NOTENAPP_MAIL_LOG: '' },
     stdio: 'ignore',
   });

@@ -60,14 +60,13 @@ function forward($url, $method, $headers, $body = null, $follow = null) {
     ]);
     if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
     $response = curl_exec($ch);
-    if ($response === false) {
-        $error = curl_error($ch);
-        curl_close($ch);
-        respond_json(['error' => 'Proxy-Fehler: ' . $error], 502);
-    }
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE) ?: 'application/octet-stream';
-    curl_close($ch);
+    $error = curl_error($ch);
+    // Ab PHP 8.0 schließt PHP das Handle selbst; ab 8.5 ist curl_close() veraltet
+    // und die Warnung würde die JSON-Antwort zerstören.
+    if (PHP_VERSION_ID < 80000) curl_close($ch);
+    if ($response === false) respond_json(['error' => 'Proxy-Fehler: ' . $error], 502);
     return [$status, $type, $response];
 }
 

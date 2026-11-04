@@ -16,7 +16,7 @@ $ALLOWED_ORIGIN = getenv('NOTENAPP_ALLOWED_ORIGIN') ?: 'https://dualshade.github
 $ALLOWED_HOSTS = getenv('NOTENAPP_ALLOWED_HOSTS') ?: '';
 // ----------------------------------------------------------------------------
 
-// Nur für automatische Tests: andere Untis-Hosts/HTTP erlauben
+// Nur für automatische Tests: andere Untis-Hosts, HTTP und andere Ports erlauben
 $RPC_HOST_PATTERN = getenv('NOTENAPP_RPC_HOST_PATTERN') ?: '/(^|\.)webuntis\.com$/i';
 $RPC_ALLOW_HTTP = getenv('NOTENAPP_RPC_ALLOW_HTTP') === '1';
 
@@ -55,19 +55,19 @@ function forward($url, $method, $headers, $body = null, $follow = null) {
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => $follow === null ? $method === 'GET' : $follow,
         CURLOPT_MAXREDIRS => 5,
+        CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_TIMEOUT => 30,
         CURLOPT_HEADER => false,
     ]);
     if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
     $response = curl_exec($ch);
-    if ($response === false) {
-        $error = curl_error($ch);
-        curl_close($ch);
-        respond_json(['error' => 'Proxy-Fehler: ' . $error], 502);
-    }
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE) ?: 'application/octet-stream';
-    curl_close($ch);
+    $error = curl_error($ch);
+    // Ab PHP 8.0 schließt PHP das Handle selbst; ab 8.5 ist curl_close() veraltet
+    // und die Warnung würde die JSON-Antwort zerstören.
+    if (PHP_VERSION_ID < 80000) curl_close($ch);
+    if ($response === false) respond_json(['error' => 'Proxy-Fehler: ' . $error], 502);
     return [$status, $type, $response];
 }
 
@@ -75,27 +75,38 @@ $route = $_GET['route'] ?? '';
 
 if ($route === 'rpc' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $payload = json_decode(file_get_contents('php://input'), true);
-    if (!is_array($payload) || empty($payload['url'])) respond_json(['error' => 'Ungültige Anfrage.'], 400);
+    if (!is_array($payload) || !is_string($payload['url'] ?? null) || $payload['url'] === '') {
+        respond_json(['error' => 'Ungültige Anfrage.'], 400);
+    }
     $parts = parse_url($payload['url']);
     $scheme = $parts['scheme'] ?? '';
     $host = strtolower($parts['host'] ?? '');
     $schemeOk = $scheme === 'https' || ($RPC_ALLOW_HTTP && $scheme === 'http');
-    if (!$schemeOk || !preg_match($RPC_HOST_PATTERN, $host)) {
+    // Nur der Standard-Port: ein Port, der nicht antwortet, hielte PHP bis zum Timeout fest.
+    $portOk = !isset($parts['port']) || $parts['port'] === 443 || $RPC_ALLOW_HTTP;
+    if (!$schemeOk || !$portOk || !preg_match($RPC_HOST_PATTERN, $host)) {
         respond_json(['error' => 'Nur https://*.webuntis.com ist erlaubt.'], 403);
     }
-    $method = strtoupper((string) ($payload['method'] ?? 'POST'));
-    // GET nur für die REST-API (Hausaufgaben), alles andere ist JSON-RPC per POST
-    if ($method === 'GET' && strpos($parts['path'] ?? '', '/WebUntis/api/') !== 0) {
+    $method = $payload['method'] ?? 'POST';
+    if (!is_string($method)) respond_json(['error' => 'Ungültige Methode.'], 400);
+    $method = strtoupper($method);
+    // GET nur für die REST-API (Hausaufgaben), alles andere ist JSON-RPC per POST. Im Pfad
+    // nur Buchstaben, Ziffern, _ - und /: Punkt-Segmente wie /../, ..;/ oder %2e lösen curl
+    // oder der Untis-Server erst nach dieser Prüfung auf.
+    $path = $parts['path'] ?? '';
+    if ($method === 'GET' && !preg_match('#^/WebUntis/api/[A-Za-z0-9_/-]+\z#', $path)) {
         respond_json(['error' => 'GET nur für /WebUntis/api/ erlaubt.'], 403);
     }
     if ($method !== 'GET' && $method !== 'POST') respond_json(['error' => 'Ungültige Methode.'], 400);
     $headers = ['Content-Type: application/json', 'Accept: application/json', 'User-Agent: Notenapp'];
-    if (!empty($payload['cookie'])) {
-        $headers[] = 'Cookie: ' . preg_replace('/[\r\n]/', '', substr((string) $payload['cookie'], 0, 2000));
+    $cookie = $payload['cookie'] ?? '';
+    if (is_scalar($cookie) && (string) $cookie !== '') {
+        $headers[] = 'Cookie: ' . preg_replace('/[\r\n]/', '', substr((string) $cookie, 0, 2000));
     }
+    $rpcBody = $payload['body'] ?? '';
     list($status, , $body) = $method === 'GET'
         ? forward($payload['url'], 'GET', $headers, null, false)
-        : forward($payload['url'], 'POST', $headers, (string) ($payload['body'] ?? ''));
+        : forward($payload['url'], 'POST', $headers, is_scalar($rpcBody) ? (string) $rpcBody : '');
     http_response_code($status);
     header('Content-Type: application/json');
     echo $body;
@@ -116,4 +127,4 @@ if ($route === 'fetch' && $_SERVER['REQUEST_METHOD'] === 'GET') {
     exit;
 }
 
-respond_json(['ok' => true, 'service' => 'notenapp-proxy', 'version' => 2, 'features' => ['homework'], 'routes' => ['POST ?route=rpc', 'GET ?route=fetch&url=']]);
+respond_json(['ok' => true, 'service' => 'notenapp-proxy', 'version' => 3, 'features' => ['homework'], 'routes' => ['POST ?route=rpc', 'GET ?route=fetch&url=']]);

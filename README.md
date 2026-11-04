@@ -42,7 +42,7 @@ cd proxy
 npx wrangler deploy   # vorher ALLOWED_ORIGIN / ALLOWED_HOSTS in wrangler.toml setzen
 ```
 
-> **Hausaufgaben aus Untis** laufen über die Untis-REST-API (`/WebUntis/api/homeworks/lessons`). Dafür braucht es die aktuelle Proxy-Version. Hast du den Proxy schon früher hochgeladen, lad `notenapp-proxy.php` bzw. den Worker einmal neu hoch. Ob die neue Version läuft, siehst du beim Aufruf der Proxy-URL im Browser an `"version":2`. Mit einem alten Proxy lädt der Stundenplan weiter, nur die Hausaufgaben fehlen.
+> **Hausaufgaben aus Untis** laufen über die Untis-REST-API (`/WebUntis/api/homeworks/lessons`). Dafür braucht es die aktuelle Proxy-Version. Hast du den Proxy schon früher hochgeladen, lad `notenapp-proxy.php` bzw. den Worker einmal neu hoch. Ob die neue Version läuft, siehst du beim Aufruf der Proxy-URL im Browser an `"version":3` (Hausaufgaben gehen ab 2, 3 hat die strengeren Prüfungen). Mit einem alten Proxy lädt der Stundenplan weiter, nur die Hausaufgaben fehlen.
 
 Die Proxy-Adresse steht in `site/js/config.js` (Standard: `https://dualshade.xyz/notenapp-proxy.php`). Alternativ legst du unter **Settings → Secrets and variables → Actions → Variables** die Variable **`PROXY_URL`** an, die beim Build Vorrang hat. In der App erscheint dann **„Mit Untis verbinden“**:
 
@@ -57,7 +57,7 @@ Die Zugangsdaten bleiben nur auf dem jeweiligen Gerät. Jeder, der die Seite nut
 - Die Daten liegen in `notenapp-data/` neben der Datei. Jede Datei beginnt mit einer PHP-`exit`-Zeile, dadurch sind sie auch ohne `.htaccess` nicht abrufbar.
 - Passwörter werden mit `password_hash` gespeichert, Sitzungs- und Reset-Tokens nur als SHA-256.
 - Fehlversuche beim Login sind begrenzt.
-- Passwort-Reset-Mails gehen über PHP `mail()`.
+- Passwort-Reset-Mails gehen über PHP `mail()`: Absender `NOTENAPP_MAIL_FROM` (Standard `noreply@dualshade.xyz`), Envelope-Absender bzw. Return-Path `NOTENAPP_MAIL_RETURN` (Standard `support@dualshade.xyz`, damit SPF für DMARC zur Domain passt). Auf einer eigenen Domain beide auf eigene Adressen setzen, ebenso `NOTENAPP_ALLOWED_ORIGIN` und `NOTENAPP_APP_URL` (siehe „Einstellungen“ oben in der Datei).
 - Das Untis-Passwort wird nie hochgeladen.
 
 ### 3. Klausurplan-Quelle angeben (optional)

@@ -46,12 +46,15 @@ async function rpc(request, env) {
   } catch {
     return json(env, { error: 'Ungültige URL.' }, 400);
   }
-  if (target.protocol !== 'https:' || !RPC_HOST.test(target.hostname)) {
+  // Nur der Standard-Port (new URL() lässt :443 bei https weg)
+  if (target.protocol !== 'https:' || target.port !== '' || !RPC_HOST.test(target.hostname)) {
     return json(env, { error: 'Nur https://*.webuntis.com ist erlaubt.' }, 403);
   }
   const method = String(payload.method ?? 'POST').toUpperCase();
-  // GET nur für die REST-API (Hausaufgaben), alles andere ist JSON-RPC per POST
-  if (method === 'GET' && !target.pathname.startsWith('/WebUntis/api/')) {
+  // GET nur für die REST-API (Hausaufgaben), alles andere ist JSON-RPC per POST. Im Pfad
+  // nur Buchstaben, Ziffern, _ - und /: ..;/ etwa löst new URL() nicht auf, der
+  // Untis-Server aber schon.
+  if (method === 'GET' && !/^\/WebUntis\/api\/[A-Za-z0-9_/-]+$/.test(target.pathname)) {
     return json(env, { error: 'GET nur für /WebUntis/api/ erlaubt.' }, 403);
   }
   if (method !== 'GET' && method !== 'POST') return json(env, { error: 'Ungültige Methode.' }, 400);
@@ -91,6 +94,6 @@ export default {
     } catch (err) {
       return json(env, { error: `Proxy-Fehler: ${err.message}` }, 502);
     }
-    return json(env, { ok: true, service: 'notenapp-proxy', version: 2, features: ['homework'], routes: ['POST ?route=rpc', 'GET ?route=fetch&url='] });
+    return json(env, { ok: true, service: 'notenapp-proxy', version: 3, features: ['homework'], routes: ['POST ?route=rpc', 'GET ?route=fetch&url='] });
   },
 };

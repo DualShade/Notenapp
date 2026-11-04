@@ -12,7 +12,7 @@ function mockUpstreamFetch(log) {
   return async (input, init = {}) => {
     const url = new URL(typeof input === 'string' ? input : input.href);
     log?.push({ host: url.hostname, cookie: init.headers?.Cookie ?? '' });
-    const { status, json } = handleUntis(url.pathname, JSON.parse(init.body || '{}'), init.headers?.Cookie ?? '');
+    const { status, json } = handleUntis(url.pathname, JSON.parse(init.body || '{}'), init.headers?.Cookie ?? '', init.method ?? 'GET');
     return new Response(JSON.stringify(json), { status, headers: { 'Content-Type': 'application/json' } });
   };
 }
@@ -74,16 +74,30 @@ test('Worker-Proxy: kompletter Login über den Tunnel', async () => {
   }
 });
 
+// Pfade, über die ein GET aus /WebUntis/api/ herauskäme (curl, new URL() oder der Untis-Server lösen sie auf)
+const ESCAPES = ['/WebUntis/api/../jsonrpc.do', '/WebUntis/api/%2e%2e/jsonrpc.do', '/WebUntis/api/./../jsonrpc.do', '/WebUntis/api/..;/jsonrpc.do', '/WebUntis/api/%2e%2e;/jsonrpc.do'];
+
 test('Worker-Proxy: nur webuntis.com und freigegebene Hosts', async () => {
-  const env = { ALLOWED_HOSTS: 'schule.de' };
-  const rpc = (url) => worker.fetch(new Request('https://proxy.test/?route=rpc', { method: 'POST', body: JSON.stringify({ url, body: '{}' }) }), env);
-  assert.equal((await rpc('https://evil.example.com/x')).status, 403);
-  assert.equal((await rpc('http://mock.webuntis.com/x')).status, 403);
-  assert.equal((await rpc('https://webuntis.com.evil.net/x')).status, 403);
-  const getRpc = (url) => worker.fetch(new Request('https://proxy.test/?route=rpc', { method: 'POST', body: JSON.stringify({ url, method: 'GET' }) }), env);
-  assert.equal((await getRpc('https://mock.webuntis.com/WebUntis/jsonrpc.do')).status, 403);
-  const fetchRoute = (url) => worker.fetch(new Request(`https://proxy.test/?route=fetch&url=${encodeURIComponent(url)}`), env);
-  assert.equal((await fetchRoute('https://intranet.local/geheim')).status, 403);
+  // Abgelehnte Anfragen dürfen nie nach draußen gehen
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (u) => { throw new Error(`Upstream darf nicht aufgerufen werden: ${u}`); };
+  try {
+    const env = { ALLOWED_HOSTS: 'schule.de' };
+    const rpc = (url) => worker.fetch(new Request('https://proxy.test/?route=rpc', { method: 'POST', body: JSON.stringify({ url, body: '{}' }) }), env);
+    assert.equal((await rpc('https://evil.example.com/x')).status, 403);
+    assert.equal((await rpc('http://mock.webuntis.com/x')).status, 403);
+    assert.equal((await rpc('https://webuntis.com.evil.net/x')).status, 403);
+    assert.equal((await rpc('https://mock.webuntis.com:8443/x')).status, 403, 'nur Port 443');
+    const getRpc = (url) => worker.fetch(new Request('https://proxy.test/?route=rpc', { method: 'POST', body: JSON.stringify({ url, method: 'GET' }) }), env);
+    assert.equal((await getRpc('https://mock.webuntis.com/WebUntis/jsonrpc.do')).status, 403);
+    for (const escape of ESCAPES) {
+      assert.equal((await getRpc(`https://mock.webuntis.com${escape}`)).status, 403, `kein Weg aus /WebUntis/api/ heraus: ${escape}`);
+    }
+    const fetchRoute = (url) => worker.fetch(new Request(`https://proxy.test/?route=fetch&url=${encodeURIComponent(url)}`), env);
+    assert.equal((await fetchRoute('https://intranet.local/geheim')).status, 403);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
 
 // ---------- PHP-Proxy mit echtem PHP-Server ----------
@@ -96,7 +110,8 @@ const phpAvailable = await new Promise((resolve) => {
 test('PHP-Proxy: Schulsuche + Login + Stundenplan', { skip: !phpAvailable && 'php mit curl nicht installiert' }, async () => {
   const upstream = await startMockUntisServer();
   const port = 18000 + Math.floor(Math.random() * 1000);
-  const php = spawn('php', ['-S', `127.0.0.1:${port}`, 'proxy/notenapp-proxy.php'], {
+  // Fehler anzeigen wie ein Webspace mit display_errors: jede Warnung zerstört dann die JSON-Antwort
+  const php = spawn('php', ['-d', 'display_errors=1', '-d', 'error_reporting=-1', '-S', `127.0.0.1:${port}`, 'proxy/notenapp-proxy.php'], {
     env: { ...process.env, NOTENAPP_RPC_HOST_PATTERN: '/^127\\.0\\.0\\.1$/', NOTENAPP_RPC_ALLOW_HTTP: '1', NOTENAPP_ALLOWED_ORIGIN: 'https://dualshade.github.io' },
     stdio: 'ignore',
   });
@@ -122,6 +137,36 @@ test('PHP-Proxy: Schulsuche + Login + Stundenplan', { skip: !phpAvailable && 'ph
   assert.equal(res.headers.get('access-control-allow-origin'), 'https://dualshade.github.io');
   const getRpc = await fetch(`${base}?route=rpc`, { method: 'POST', body: JSON.stringify({ url: `http://127.0.0.1:${upstream.port}/WebUntis/jsonrpc.do`, method: 'GET' }) });
   assert.equal(getRpc.status, 403, 'GET nur auf /WebUntis/api/');
+  for (const escape of ESCAPES) {
+    const dotted = await fetch(`${base}?route=rpc`, { method: 'POST', body: JSON.stringify({ url: `http://127.0.0.1:${upstream.port}${escape}`, method: 'GET' }) });
+    assert.equal(dotted.status, 403, `kein Weg aus /WebUntis/api/ heraus: ${escape}`);
+  }
+  // Eingaben mit falschem Typ: saubere 400 statt PHP-Warnung oder -Fehler
+  for (const bad of [{ url: ['x'] }, { url: `http://127.0.0.1:${upstream.port}/WebUntis/jsonrpc.do`, method: ['GET'] }]) {
+    const res = await fetch(`${base}?route=rpc`, { method: 'POST', body: JSON.stringify(bad) });
+    assert.equal(res.status, 400);
+    assert.ok((await res.json()).error);
+  }
+  // Untis nicht erreichbar → 502 mit JSON
+  const down = await fetch(`${base}?route=rpc`, { method: 'POST', body: JSON.stringify({ url: 'http://127.0.0.1:1/WebUntis/jsonrpc.do', body: '{}' }) });
+  assert.equal(down.status, 502);
+  assert.match((await down.json()).error, /Proxy-Fehler/);
   const blocked = await fetch(`${base}?route=fetch&url=${encodeURIComponent('http://127.0.0.1:1/x')}`);
   assert.equal(blocked.status, 403);
+});
+
+test('PHP-Proxy mit Standard-Einstellungen: nur Port 443', { skip: !phpAvailable && 'php mit curl nicht installiert' }, async () => {
+  const port = 18000 + Math.floor(Math.random() * 1000);
+  const php = spawn('php', ['-d', 'display_errors=1', '-d', 'error_reporting=-1', '-S', `127.0.0.1:${port}`, 'proxy/notenapp-proxy.php'], { stdio: 'ignore' });
+  after(() => php.kill());
+  const base = `http://127.0.0.1:${port}/notenapp-proxy.php`;
+  for (let i = 0; i < 50; i++) {
+    try { await fetch(base); break; } catch { await wait(100); }
+  }
+  // Abgelehnt, bevor curl irgendwohin verbindet
+  for (const url of ['https://mese.webuntis.com:8443/WebUntis/jsonrpc.do', 'https://mese.webuntis.com:80/WebUntis/jsonrpc.do']) {
+    const res = await fetch(`${base}?route=rpc`, { method: 'POST', body: JSON.stringify({ url, body: '{}' }) });
+    assert.equal(res.status, 403, url);
+  }
+  assert.equal((await (await fetch(base)).json()).version, 3);
 });

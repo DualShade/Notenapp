@@ -6,6 +6,9 @@ geändert wurde, steht in der Git-Historie.
 
 ## [Unreleased]
 
+### Hinzugefügt
+- `ARCHITECTURE.md`: wofür jeder Teil da ist, wohin neuer Code gehört, was wovon abhängen darf, und dass die PHP-Dateien hier gepflegt und nach dualshade.xyz kopiert werden.
+
 ### Behoben
 - PHP-Proxy unter PHP 8.5: `curl_close()` ist dort veraltet, und die Warnung landete vor der JSON-Antwort, sobald der Webspace Fehler anzeigt. Der Aufruf bleibt nur noch für PHP 7.
 

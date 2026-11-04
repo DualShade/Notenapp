@@ -83,8 +83,11 @@ if ($route === 'rpc' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         respond_json(['error' => 'Nur https://*.webuntis.com ist erlaubt.'], 403);
     }
     $method = strtoupper((string) ($payload['method'] ?? 'POST'));
-    // GET nur für die REST-API (Hausaufgaben), alles andere ist JSON-RPC per POST
-    if ($method === 'GET' && strpos($parts['path'] ?? '', '/WebUntis/api/') !== 0) {
+    // GET nur für die REST-API (Hausaufgaben), alles andere ist JSON-RPC per POST.
+    // Punkt-Segmente (/../, auch %2e) löst curl auf, sie führten aus /WebUntis/api/
+    // heraus; der Worker sieht durch new URL() schon den aufgelösten Pfad.
+    $path = $parts['path'] ?? '';
+    if ($method === 'GET' && (strpos($path, '/WebUntis/api/') !== 0 || preg_match('#(^|/)(\.|%2e){1,2}(/|$)#i', $path))) {
         respond_json(['error' => 'GET nur für /WebUntis/api/ erlaubt.'], 403);
     }
     if ($method !== 'GET' && $method !== 'POST') respond_json(['error' => 'Ungültige Methode.'], 400);

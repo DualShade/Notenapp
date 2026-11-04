@@ -15,6 +15,9 @@ $ALLOWED_ORIGIN = getenv('NOTENAPP_ALLOWED_ORIGIN') ?: 'https://dualshade.github
 $APP_URL = getenv('NOTENAPP_APP_URL') ?: 'https://dualshade.github.io/Notenapp/';
 $DATA_DIR = getenv('NOTENAPP_DATA_DIR') ?: __DIR__ . '/notenapp-data';
 $MAIL_FROM = getenv('NOTENAPP_MAIL_FROM') ?: 'Notenapp <noreply@dualshade.xyz>';
+// Envelope-Absender (Return-Path): eine Adresse der Domain, damit SPF für DMARC zur
+// Domain passt und Unzustellbares in einem echten Postfach landet.
+$MAIL_RETURN = getenv('NOTENAPP_MAIL_RETURN') ?: 'support@dualshade.xyz';
 $MAIL_LOG = getenv('NOTENAPP_MAIL_LOG') ?: ''; // nur für Tests: Mails in Datei statt senden
 $MAX_DATA_BYTES = 3 * 1024 * 1024;
 $SESSION_DAYS = 180;
@@ -137,13 +140,13 @@ function auth($body) {
 }
 
 function send_mail($to, $subject, $text) {
-    global $MAIL_FROM, $MAIL_LOG;
+    global $MAIL_FROM, $MAIL_RETURN, $MAIL_LOG;
     if ($MAIL_LOG) {
         file_put_contents($MAIL_LOG, json_encode(['to' => $to, 'subject' => $subject, 'text' => $text]) . "\n", FILE_APPEND);
         return true;
     }
-    $headers = "From: $MAIL_FROM\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit";
-    return @mail($to, '=?UTF-8?B?' . base64_encode($subject) . '?=', $text, $headers);
+    $headers = "From: $MAIL_FROM\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\nAuto-Submitted: auto-generated";
+    return @mail($to, '=?UTF-8?B?' . base64_encode($subject) . '?=', $text, $headers, '-f' . $MAIL_RETURN);
 }
 
 function self_url() {

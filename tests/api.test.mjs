@@ -1,7 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
@@ -96,6 +96,34 @@ test('Passwort vergessen: Mail mit Link, neues Passwort setzen', { skip }, async
   assert.ok(res.body.token);
   assert.equal((await api('reset_confirm', { resetToken, password: 'nochNeuer123' })).status, 410, 'Link nur einmal gültig');
   assert.equal((await api('login', { email: 'max@example.de', password: 'nochNeuer123' })).status, 200);
+});
+
+test('Reset-Mail: Envelope-Absender und Auto-Submitted gehen an sendmail', { skip }, async () => {
+  // Echter mail()-Aufruf, nur landet er bei einem Skript statt bei sendmail
+  const dir = await mkdtemp(path.join(tmpdir(), 'notenapp-mail-'));
+  const sendmail = path.join(dir, 'sendmail.sh');
+  await writeFile(sendmail, `#!/bin/sh\nprintf '%s\\n' "$@" > "${dir}/args"\ncat > "${dir}/message"\n`, { mode: 0o755 });
+  const port = 20000 + Math.floor(Math.random() * 1000);
+  const server = spawn('php', ['-d', `sendmail_path=${sendmail}`, '-S', `127.0.0.1:${port}`, 'proxy/notenapp-api.php'], {
+    env: { ...process.env, NOTENAPP_DATA_DIR: path.join(dir, 'store'), NOTENAPP_MAIL_LOG: '' },
+    stdio: 'ignore',
+  });
+  const url = `http://127.0.0.1:${port}/notenapp-api.php`;
+  const post = (body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) });
+  try {
+    for (let i = 0; i < 50; i++) { try { await fetch(url); break; } catch { await wait(100); } }
+    assert.equal((await post({ action: 'register', email: 'post@example.de', password: 'geheim123' })).status, 200);
+    assert.equal((await post({ action: 'reset_request', email: 'post@example.de' })).status, 200);
+    const args = (await readFile(path.join(dir, 'args'), 'utf8')).trim().split('\n');
+    assert.deepEqual(args, ['-fsupport@dualshade.xyz'], 'Return-Path ist eine Adresse der Domain');
+    const message = await readFile(path.join(dir, 'message'), 'utf8');
+    assert.match(message, /^To: post@example\.de\r?$/m);
+    assert.match(message, /^From: Notenapp <noreply@dualshade\.xyz>\r?$/m);
+    assert.match(message, /^Auto-Submitted: auto-generated\r?$/m);
+  } finally {
+    server.kill();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('Kalender-Abo liefert Klausuren und offene Hausaufgaben', { skip }, async () => {

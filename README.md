@@ -57,7 +57,7 @@ Die Zugangsdaten bleiben nur auf dem jeweiligen Gerät. Jeder, der die Seite nut
 - Die Daten liegen in `notenapp-data/` neben der Datei. Jede Datei beginnt mit einer PHP-`exit`-Zeile, dadurch sind sie auch ohne `.htaccess` nicht abrufbar.
 - Passwörter werden mit `password_hash` gespeichert, Sitzungs- und Reset-Tokens nur als SHA-256.
 - Fehlversuche beim Login sind begrenzt.
-- Passwort-Reset-Mails gehen über PHP `mail()`.
+- Passwort-Reset-Mails gehen über PHP `mail()`, mit `support@dualshade.xyz` als Envelope-Absender (Return-Path), damit SPF für DMARC zur Domain passt. Andere Adresse: Umgebungsvariable `NOTENAPP_MAIL_RETURN`.
 - Das Untis-Passwort wird nie hochgeladen.
 
 ### 3. Klausurplan-Quelle angeben (optional)

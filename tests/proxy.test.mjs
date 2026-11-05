@@ -129,6 +129,8 @@ test('Worker-Proxy: rpc folgt keinen Weiterleitungen', async () => {
 
 // Schul-Homepage als Attrappe: ?to=…&status=… leitet dorthin weiter, /kette/N leitet N-mal
 // weiter, alles andere antwortet mit Pfad und Query. Jeder angefragte Pfad landet in `hits`.
+// Location geht als rohe UTF-8-Bytes raus wie bei einem Server, der einen Dateinamen mit
+// Umlaut einsetzt (Node schreibt Header als Latin-1, daher der Umweg über Buffer).
 async function startSchoolServer() {
   const hits = [];
   const server = createServer((req, res) => {
@@ -137,7 +139,8 @@ async function startSchoolServer() {
     const to = url.searchParams.get('to');
     const chain = /^\/kette\/(\d+)$/.exec(url.pathname);
     if (to !== null || (chain && chain[1] !== '0')) {
-      res.writeHead(Number(url.searchParams.get('status') ?? 302), { Location: to ?? `/kette/${chain[1] - 1}` });
+      const location = Buffer.from(to ?? `/kette/${chain[1] - 1}`, 'utf8').toString('latin1');
+      res.writeHead(Number(url.searchParams.get('status') ?? 302), { Location: location });
       return res.end();
     }
     res.writeHead(url.pathname === '/fehlt' ? 404 : 200, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -166,9 +169,10 @@ async function checkFetchRedirects(get, { origin, port, hits }) {
     assert.doesNotMatch((await res.json()).error, /Weiterleitung/);
   }
 
-  // Ziele in der Liste: absolut, protokollrelativ, pfadabsolut, pfadrelativ, nur Query, mit Leerzeichen
+  // Ziele in der Liste: absolut, protokollrelativ, pfadabsolut, pfadrelativ, nur Query, mit
+  // Leerzeichen, mit Umlauten (einmal UTF-8-kodiert, nicht doppelt)
   for (const to of [`${origin}/ziel`, `//127.0.0.1:${port}/protokollrelativ`, '/absolut/plan.pdf', 'plan.pdf', '../plan.pdf',
-    './x/../y.pdf', '../../../../oben.pdf', '?x=1', 'plan mit leerzeichen.pdf']) {
+    './x/../y.pdf', '../../../../oben.pdf', '?x=1', 'plan mit leerzeichen.pdf', 'März.pdf', '/Klausuren/Übersicht 2026.pdf?jahr=Q1&fach=Bio-ä']) {
     const want = new URL(to, from);
     assert.deepEqual(await read(await get(via(to))), [200, want.pathname + want.search], `Weiterleitung nach ${to}`);
   }

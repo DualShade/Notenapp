@@ -47,6 +47,17 @@ function fetchRefusal(target, env) {
   return null;
 }
 
+// Headers.get() liefert die Bytes des Location-Headers als Latin-1. Schickt die Schule rohe
+// UTF-8-Bytes (/März.pdf), würde new URL() jedes Byte erneut kodieren (%C3%83%C2%A4).
+function utf8Location(value) {
+  if (!/[\x80-\xff]/.test(value) || /[^\x00-\xff]/.test(value)) return value;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(value, (c) => c.charCodeAt(0)));
+  } catch {
+    return value; // kein gültiges UTF-8 (z. B. echtes Latin-1): unverändert lassen
+  }
+}
+
 async function rpc(request, env) {
   let payload;
   try {
@@ -106,7 +117,7 @@ async function fetchUrl(url, env) {
     await upstream.body?.cancel();
     if (redirects === MAX_REDIRECTS) return json(env, { error: `Proxy-Fehler: mehr als ${MAX_REDIRECTS} Weiterleitungen.` }, 502);
     try {
-      target = new URL(location, target);
+      target = new URL(utf8Location(location), target);
     } catch {
       return json(env, { error: 'Weiterleitung: ungültige Adresse.' }, 403);
     }

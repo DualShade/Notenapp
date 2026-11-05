@@ -14,6 +14,7 @@ geändert wurde, steht in der Git-Historie.
 - Der Proxy meldet `"version":3` (PHP und Worker).
 - Die Proxy-Tests prüfen, dass Hausaufgaben wirklich per GET bei Untis ankommen (die Attrappe lehnt POST auf `/WebUntis/api/` ab), lassen PHP Warnungen anzeigen wie ein Webspace mit `display_errors` und schicken abgelehnte Anfragen des Workers nie nach draußen.
 - Die Proxy-Tests prüfen Weiterleitungen bei `route=fetch` in Worker und PHP-Proxy (Ziel außerhalb der Liste, innerhalb, relativ und protokollrelativ, mehr als 5, fremdes Schema) und dass die rpc-Route keiner Weiterleitung folgt. `php -S` startet dabei auf einem freien Port vom Betriebssystem statt auf einem zufälligen.
+- Worker: `route=fetch` kodiert Umlaute im Weiterleitungsziel auch beim selbst verfolgten Weiterleiten nur einmal, wie der PHP-Proxy und wie vorher `fetch` mit `redirect: 'follow'`: `Location: /März.pdf` als rohe UTF-8-Bytes wird zu `/M%C3%A4rz.pdf`, nicht zu `/M%C3%83%C2%A4rz.pdf`. Die Proxy-Tests prüfen das für beide Varianten; die Schul-Attrappe schickt `Location` dafür als rohe UTF-8-Bytes.
 
 ### Behoben
 - PHP-Proxy unter PHP 8.5: `curl_close()` ist dort veraltet, und die Warnung landete vor der JSON-Antwort, sobald der Webspace Fehler anzeigt. Der Aufruf bleibt nur noch für PHP 7.

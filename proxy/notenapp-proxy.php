@@ -219,4 +219,4 @@ if ($route === 'fetch' && $_SERVER['REQUEST_METHOD'] === 'GET') {
     exit;
 }
 
-respond_json(['ok' => true, 'service' => 'notenapp-proxy', 'version' => 3, 'features' => ['homework'], 'routes' => ['POST ?route=rpc', 'GET ?route=fetch&url=']]);
+respond_json(['ok' => true, 'service' => 'notenapp-proxy', 'version' => 4, 'features' => ['homework'], 'routes' => ['POST ?route=rpc', 'GET ?route=fetch&url=']]);

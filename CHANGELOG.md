@@ -11,7 +11,7 @@ geändert wurde, steht in der Git-Historie.
 
 ### Geändert
 - Passwort-Reset-Mails gehen mit `support@dualshade.xyz` als Envelope-Absender (`-f`, Return-Path) und mit `Auto-Submitted: auto-generated` raus, damit SPF für DMARC zur Domain passt und Unzustellbares in einem echten Postfach landet. Andere Adresse über `NOTENAPP_MAIL_RETURN`. Das stand bisher nur in der Kopie auf dualshade.xyz und wäre beim nächsten Kopieren verloren gegangen.
-- Der Proxy meldet `"version":3` (PHP und Worker).
+- Der Proxy meldet `"version":4` (PHP und Worker): 3 kam mit den strengeren Prüfungen, 4 mit den geprüften Weiterleitungen bei `route=fetch`, damit man einem hochgeladenen Proxy ansieht, ob er sie schon hat.
 - Die Proxy-Tests prüfen, dass Hausaufgaben wirklich per GET bei Untis ankommen (die Attrappe lehnt POST auf `/WebUntis/api/` ab), lassen PHP Warnungen anzeigen wie ein Webspace mit `display_errors` und schicken abgelehnte Anfragen des Workers nie nach draußen.
 - Die Proxy-Tests prüfen Weiterleitungen bei `route=fetch` in Worker und PHP-Proxy (Ziel außerhalb der Liste, innerhalb, relativ und protokollrelativ, mehr als 5, fremdes Schema) und dass die rpc-Route keiner Weiterleitung folgt. `php -S` startet dabei auf einem freien Port vom Betriebssystem statt auf einem zufälligen.
 - Worker: `route=fetch` kodiert Umlaute im Weiterleitungsziel auch beim selbst verfolgten Weiterleiten nur einmal, wie der PHP-Proxy und wie vorher `fetch` mit `redirect: 'follow'`: `Location: /März.pdf` als rohe UTF-8-Bytes wird zu `/M%C3%A4rz.pdf`, nicht zu `/M%C3%83%C2%A4rz.pdf`. Die Proxy-Tests prüfen das für beide Varianten; die Schul-Attrappe schickt `Location` dafür als rohe UTF-8-Bytes.

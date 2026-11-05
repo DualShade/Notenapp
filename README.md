@@ -42,7 +42,7 @@ cd proxy
 npx wrangler deploy   # vorher ALLOWED_ORIGIN / ALLOWED_HOSTS in wrangler.toml setzen
 ```
 
-> **Hausaufgaben aus Untis** laufen über die Untis-REST-API (`/WebUntis/api/homeworks/lessons`). Dafür braucht es die aktuelle Proxy-Version. Hast du den Proxy schon früher hochgeladen, lad `notenapp-proxy.php` bzw. den Worker einmal neu hoch. Ob die neue Version läuft, siehst du beim Aufruf der Proxy-URL im Browser an `"version":3` (Hausaufgaben gehen ab 2, 3 hat die strengeren Prüfungen). Mit einem alten Proxy lädt der Stundenplan weiter, nur die Hausaufgaben fehlen.
+> **Hausaufgaben aus Untis** laufen über die Untis-REST-API (`/WebUntis/api/homeworks/lessons`). Dafür braucht es die aktuelle Proxy-Version. Hast du den Proxy schon früher hochgeladen, lad `notenapp-proxy.php` bzw. den Worker einmal neu hoch. Ob die neue Version läuft, siehst du beim Aufruf der Proxy-URL im Browser an `"version":4` (Hausaufgaben gehen ab 2, 3 hat die strengeren Prüfungen, 4 prüft auch jede Weiterleitung beim Abruf von Homepage und PDF). Mit einem alten Proxy lädt der Stundenplan weiter, nur die Hausaufgaben fehlen.
 
 Die Proxy-Adresse steht in `site/js/config.js` (Standard: `https://dualshade.xyz/notenapp-proxy.php`). Alternativ legst du unter **Settings → Secrets and variables → Actions → Variables** die Variable **`PROXY_URL`** an, die beim Build Vorrang hat. In der App erscheint dann **„Mit Untis verbinden“**:
 

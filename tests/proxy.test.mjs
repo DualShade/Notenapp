@@ -301,7 +301,7 @@ test('PHP-Proxy mit Standard-Einstellungen: nur Port 443, route=fetch gesperrt',
   }
   // Ohne NOTENAPP_ALLOWED_HOSTS (wie auf dualshade.xyz) ist jede Adresse gesperrt
   assert.equal((await fetch(`${base}?route=fetch&url=${encodeURIComponent('https://www.lgoe.de/')}`)).status, 403);
-  assert.equal((await (await fetch(base)).json()).version, 3);
+  assert.equal((await (await fetch(base)).json()).version, 4);
 });
 
 test('PHP-Proxy: route=fetch folgt Weiterleitungen nur zu freigegebenen Hosts', { skip: !phpAvailable && 'php mit curl nicht installiert' }, async () => {

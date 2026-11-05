@@ -4,7 +4,8 @@
 //   POST ?route=rpc    {url, cookie, body}  → leitet JSON-RPC an *.webuntis.com weiter
 //                                             (Schulsuche, Login, Stundenplan)
 //                      {url, method:"GET", cookie} → GET auf /WebUntis/api/… (Hausaufgaben)
-//   GET  ?route=fetch&url=…                 → Homepage/PDF abrufen (nur ALLOWED_HOSTS)
+//   GET  ?route=fetch&url=…                 → Homepage/PDF abrufen (nur ALLOWED_HOSTS,
+//                                             auch bei Weiterleitungen)
 //
 // Die ganze Untis-Logik läuft in der App; der Proxy reicht nur durch und
 // speichert nichts. Variablen (wrangler.toml oder Dashboard):
@@ -12,6 +13,8 @@
 //   ALLOWED_HOSTS   Schul-Homepage(s) für route=fetch, kommagetrennt
 
 const RPC_HOST = /(^|\.)webuntis\.com$/i;
+const REDIRECTS = [301, 302, 303, 307, 308];
+const MAX_REDIRECTS = 5;
 
 function cors(env, extra = {}) {
   return {
@@ -31,6 +34,17 @@ function json(env, data, status = 200) {
 function hostAllowed(list, host) {
   return String(list || '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean)
     .some((h) => host === h || host.endsWith(`.${h}`));
+}
+
+// Prüft eine Adresse für route=fetch: nur http/https, Host in ALLOWED_HOSTS, keine
+// Zugangsdaten (user:pass@). Gilt für die erste Adresse und jedes Weiterleitungsziel
+// gleich. Liefert null oder die Fehlermeldung.
+function fetchRefusal(target, env) {
+  if (!['http:', 'https:'].includes(target.protocol) || !hostAllowed(env.ALLOWED_HOSTS, target.hostname.toLowerCase())) {
+    return `Host ${target.hostname} ist nicht freigegeben (ALLOWED_HOSTS).`;
+  }
+  if (target.username || target.password) return 'Zugangsdaten in der Adresse sind nicht erlaubt.';
+  return null;
 }
 
 async function rpc(request, env) {
@@ -60,9 +74,11 @@ async function rpc(request, env) {
   if (method !== 'GET' && method !== 'POST') return json(env, { error: 'Ungültige Methode.' }, 400);
   const headers = { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'Notenapp' };
   if (payload.cookie) headers.Cookie = String(payload.cookie).slice(0, 2000);
+  // Keine Weiterleitungen, wie im PHP-Proxy: bei 307/308 ginge die Anfrage samt Passwort
+  // und Cookie sonst an ein beliebiges Ziel
   const upstream = method === 'GET'
     ? await fetch(target, { method: 'GET', headers, redirect: 'manual' })
-    : await fetch(target, { method: 'POST', headers, body: String(payload.body ?? '') });
+    : await fetch(target, { method: 'POST', headers, body: String(payload.body ?? ''), redirect: 'manual' });
   return new Response(upstream.body, { status: upstream.status, headers: cors(env, { 'Content-Type': 'application/json' }) });
 }
 
@@ -73,14 +89,28 @@ async function fetchUrl(url, env) {
   } catch {
     return json(env, { error: 'Ungültige URL.' }, 400);
   }
-  if (!['http:', 'https:'].includes(target.protocol) || !hostAllowed(env.ALLOWED_HOSTS, target.hostname.toLowerCase())) {
-    return json(env, { error: `Host ${target.hostname} ist nicht freigegeben (ALLOWED_HOSTS).` }, 403);
+  // Weiterleitungen verfolgt der Worker selbst, höchstens 5, und prüft jedes Ziel wie die
+  // erste Adresse. Mit redirect: 'follow' käme eine freigegebene Homepage, die
+  // weiterleitet, an jede Adresse heran.
+  for (let redirects = 0; ; redirects++) {
+    const refusal = fetchRefusal(target, env);
+    if (refusal) return json(env, { error: (redirects ? 'Weiterleitung: ' : '') + refusal }, 403);
+    const upstream = await fetch(target, { headers: { 'User-Agent': 'Mozilla/5.0 (Notenapp-Proxy)' }, redirect: 'manual' });
+    const location = REDIRECTS.includes(upstream.status) ? upstream.headers.get('Location') : null;
+    if (!location) {
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: cors(env, { 'Content-Type': upstream.headers.get('Content-Type') ?? 'application/octet-stream' }),
+      });
+    }
+    await upstream.body?.cancel();
+    if (redirects === MAX_REDIRECTS) return json(env, { error: `Proxy-Fehler: mehr als ${MAX_REDIRECTS} Weiterleitungen.` }, 502);
+    try {
+      target = new URL(location, target);
+    } catch {
+      return json(env, { error: 'Weiterleitung: ungültige Adresse.' }, 403);
+    }
   }
-  const upstream = await fetch(target, { headers: { 'User-Agent': 'Mozilla/5.0 (Notenapp-Proxy)' }, redirect: 'follow' });
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: cors(env, { 'Content-Type': upstream.headers.get('Content-Type') ?? 'application/octet-stream' }),
-  });
 }
 
 export default {

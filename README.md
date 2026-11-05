@@ -33,7 +33,7 @@ Browser dürfen WebUntis nicht direkt ansprechen. WebUntis erlaubt keine Cross-O
 
 **a) PHP-Webspace, z. B. IONOS (empfohlen, wenn vorhanden)**
 1. `proxy/notenapp-proxy.php` hochladen, z. B. nach `https://deine-domain.de/notenapp-proxy.php`.
-2. Oben in der Datei `$ALLOWED_ORIGIN` auf deine Pages-Adresse setzen (Standard: `https://dualshade.github.io`). Für den Klausurplan-Abruf trägst du in `$ALLOWED_HOSTS` die Schul-Homepage ein.
+2. Oben in der Datei `$ALLOWED_ORIGIN` auf deine Pages-Adresse setzen (Standard: `https://dualshade.github.io`). Für den Klausurplan-Abruf trägst du in `$ALLOWED_HOSTS` die Schul-Homepage ein. Weiterleitungen folgt der Proxy nur zu Hosts aus dieser Liste, höchstens 5 hintereinander. Liegen die PDFs auf einem anderen Host, gehört der mit in die Liste.
 3. Testen: Ruf die URL im Browser auf. Dort sollte `{"ok":true,"service":"notenapp-proxy",…}` erscheinen.
 
 **b) Cloudflare Worker (kostenlos)**
